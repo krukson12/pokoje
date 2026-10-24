@@ -149,6 +149,8 @@ function showLogin(msg, signedIn) {
 $('#google').onclick = () => sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
 $('#pwForm').onsubmit = async e => {
   e.preventDefault();
+  const u = $("#user").value.trim().toLowerCase();
+  if (u.includes('@') && !u.endsWith(LOCAL)) return void ($('#loginMsg').textContent = 'Z adresem Gmail zaloguj się przyciskiem „Zaloguj przez Google” poniżej.');
   const { error } = await sb.auth.signInWithPassword({ email: $("#user").value.trim().toLowerCase().replace(LOCAL, '') + LOCAL, password: $('#pw').value });
   if (error) $('#loginMsg').textContent = /invalid/i.test(error.message) ? 'Zły login albo hasło.' : 'Nie zalogowano: ' + error.message;
 };
@@ -243,8 +245,7 @@ $('#dlgBody').addEventListener('click', e => {
   const r = rooms.find(x => x.id === openId); if (!r) return;
   const act = e.target.dataset.act, beds = e.target.dataset.beds;
   if (act === 'take') save(r.id, { occupied: true }, true);
-  if (act === 'free' && confirm(`Zwolnić ${r.name}? Pokój będzie oznaczony jako posprzątany i gotowy, gość i dostawki zostaną wyczyszczone.`))
-    save(r.id, { occupied: false, guest: '', extra_beds: 0 });
+  if (act === 'free') save(r.id, { occupied: false, guest: '', extra_beds: 0 });
   if (beds) {
     const v = r.extra_beds + +beds;
     if (v >= 0 && v <= 3) save(r.id, { extra_beds: v });
@@ -284,7 +285,7 @@ function teamSheet() {
   $('#dlgBody').innerHTML = `
     <h3>Zespół<button class="x" aria-label="Zamknij">×</button></h3>
     <p class="meta">Edycja: zmienia stan pokoi i dodaje osoby. Podgląd: tylko widzi.</p>
-    <div class="staff">${staff.map(s => `<span>${esc(s.name || shortEmail(s.email))}<br><small class="meta">${esc(shortEmail(s.email))}</small></span>
+    <div class="staff">${staff.map(s => `<span>${esc(s.name || shortEmail(s.email))}<br><small class="meta">${esc(shortEmail(s.email))}${isLocal(s.email) ? '' : ' · przez Google'}</small></span>
       ${ed && !s.locked && s.email !== me ? `<select data-role="${esc(s.email)}"><option value="edit" ${s.role === 'edit' ? 'selected' : ''}>edycja</option><option value="view" ${s.role === 'view' ? 'selected' : ''}>podgląd</option></select>
       ${isLocal(s.email) ? `<button class="btn" data-pw="${esc(s.email)}">Hasło</button>` : '<span></span>'}
       <button class="btn" data-del="${esc(s.email)}">Usuń</button>`
@@ -315,6 +316,7 @@ $('#dlgBody').addEventListener('submit', async e => {
   e.preventDefault();
   const f = Object.fromEntries(new FormData(e.target));
   const login = f.login.trim().toLowerCase(), name = f.name.trim();
+  if (login.includes('@') && f.password) return alert('Osoba z adresem Gmail loguje się przyciskiem „Zaloguj przez Google”, bez hasła. Jeśli ma się logować hasłem, wpisz sam login, bez @, np. magda.k');
   if (login.includes('@')) {
     const { error } = await sb.from('pokoje_staff').insert({ email: login, name, role: f.role });
     if (error) return alert(error.code === '23505' ? 'Ta osoba już jest na liście.' : 'Nie dodano: ' + error.message);
