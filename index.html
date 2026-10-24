@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg">
 <style>
   :root { --bg:#f3f4f6; --card:#fff; --ink:#111827; --mute:#6b7280; --line:#e5e7eb;
-    --free:#16a34a; --free-bg:#dcfce7; --dirty:#b45309; --dirty-bg:#fef3c7; --occ:#b91c1c; --occ-bg:#fee2e2; }
+    --free:#16a34a; --free-bg:#dcfce7; --occ:#b91c1c; --occ-bg:#fee2e2; }
   * { box-sizing:border-box; }
   body { margin:0; font:16px/1.4 -apple-system,system-ui,sans-serif; background:var(--bg); color:var(--ink); }
   [hidden] { display:none !important; }
@@ -19,7 +19,7 @@
   header h1 { font-size:18px; margin:0; flex:1; }
   header button { background:#374151; color:#fff; border:0; border-radius:8px; padding:6px 10px; font-size:14px; }
   .wrap { max-width:960px; margin:0 auto; padding:12px 16px 40px; }
-  #stats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:12px; }
+  #stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
   .stat { background:var(--card); border-radius:10px; padding:8px; text-align:center; }
   .stat b { display:block; font-size:22px; }
   .stat small { color:var(--mute); font-size:12px; }
@@ -30,7 +30,6 @@
   .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; }
   .tile { text-align:left; border:0; border-left:5px solid; border-radius:10px; padding:8px 10px; min-height:72px; display:flex; flex-direction:column; gap:2px; color:var(--ink); }
   .tile.free { background:var(--free-bg); border-color:var(--free); }
-  .tile.dirty { background:var(--dirty-bg); border-color:var(--dirty); }
   .tile.occ { background:var(--occ-bg); border-color:var(--occ); }
   .tile b { font-size:15px; }
   .tile small { color:var(--mute); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -42,16 +41,13 @@
   .sheet h3 { margin:0 0 4px; font-size:20px; display:flex; align-items:center; gap:8px; }
   .sheet h3 .x { margin-left:auto; border:0; background:none; font-size:24px; line-height:1; padding:0 4px; }
   .badge { font-size:12px; padding:2px 8px; border-radius:99px; color:#fff; }
-  .badge.free { background:var(--free); } .badge.dirty { background:var(--dirty); } .badge.occ { background:var(--occ); }
+  .badge.free { background:var(--free); } .badge.occ { background:var(--occ); }
   .row { margin:12px 0; }
   label.f { display:block; font-size:13px; color:var(--mute); margin-bottom:4px; }
   input[type=text], input[type=email], input[type=password], input[type=number], textarea, select { width:100%; font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
   textarea { min-height:60px; resize:vertical; }
   .big { width:100%; border:0; border-radius:10px; padding:12px; font-weight:600; color:#fff; font-size:17px; }
   .big.take { background:var(--occ); } .big.free { background:var(--free); }
-  .checks { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
-  .checks label { display:flex; gap:8px; align-items:center; background:var(--bg); border-radius:8px; padding:10px; }
-  .checks input { width:20px; height:20px; }
   .stepper { display:flex; align-items:center; gap:12px; }
   .stepper button { width:40px; height:40px; border-radius:8px; border:1px solid var(--line); background:#fff; font-size:20px; }
   .stepper b { font-size:20px; min-width:20px; text-align:center; }
@@ -64,8 +60,7 @@
   .staff { display:grid; grid-template-columns:1fr auto auto auto; gap:6px; align-items:center; font-size:14px; }
   #login { max-width:360px; margin:15vh auto; padding:24px 16px; text-align:center; }
   #login .btn { width:100%; margin-top:8px; padding:12px; }
-  @media (max-width:420px) { #stats { grid-template-columns:repeat(2,1fr); } }
-</style>
+  </style>
 </head>
 <body>
 
@@ -92,8 +87,7 @@
     <div id="stats"></div>
     <nav id="filters">
       <button data-f="all" class="on">Wszystkie</button>
-      <button data-f="free">Wolne gotowe</button>
-      <button data-f="dirty">Do przygotowania</button>
+      <button data-f="free">Wolne</button>
       <button data-f="occ">Zajęte</button>
     </nav>
     <div id="board"></div>
@@ -110,7 +104,6 @@ import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js
 const sb = createClient('https://wkzaebbfhytuauioqjqw.supabase.co',
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndremFlYmJmaHl0dWF1aW9xanF3Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk5OTY2NzgsImV4cCI6MjA5NTU3MjY3OH0.DyrWDmxKqFFhr_geNapCJMlhb2lrpVhCYEQvvGzGjMw');
 
-const CHECKS = [['cleaned', 'Posprzątany'], ['prepared', 'Przygotowany'], ['keys_out', 'Klucze wydane'], ['keys_back', 'Klucze oddane']];
 const BUILDINGS = [['dworek', 'Dworek'], ['hotel', 'Hotel']];
 
 const $ = s => document.querySelector(s);
@@ -125,9 +118,8 @@ const LOCAL = '@pokoje.local';
 const isLocal = email => email.endsWith(LOCAL);
 const shortEmail = email => isLocal(email) ? 'login: ' + email.slice(0, -LOCAL.length) : email;
 const who = email => staff.find(s => s.email === email)?.name || (email ? shortEmail(email) : '?');
-const state = r => r.occupied ? 'occ' : r.cleaned && r.prepared ? 'free' : 'dirty';
-const STATE_TXT = { free: 'Wolny, gotowy', dirty: 'Wolny, do przygotowania', occ: 'Zajęty' };
-const keysWithGuest = r => r.keys_out && !r.keys_back;
+const state = r => r.occupied ? 'occ' : 'free';
+const STATE_TXT = { free: 'Wolny', occ: 'Zajęty' };
 
 // ── Auth ──
 async function start() {
@@ -196,7 +188,7 @@ function render() {
   const n = s => rooms.filter(r => state(r) === s).length;
   const beds = rooms.reduce((a, r) => a + r.extra_beds, 0);
   $('#stats').innerHTML = [
-    [n('free'), 'wolne gotowe'], [n('dirty'), 'do przygotowania'], [n('occ'), 'zajęte'],
+    [n('free'), 'wolne'], [n('occ'), 'zajęte'],
     [`${beds} / ${settings.extra_beds_total ?? '?'}`, 'dostawki w użyciu'],
   ].map(([v, l]) => `<div class="stat"><b>${v}</b><small>${l}</small></div>`).join('');
 
@@ -210,7 +202,7 @@ function render() {
 
 function tile(r) {
   const s = state(r);
-  const ic = [r.extra_beds ? `🛏+${r.extra_beds}` : '', keysWithGuest(r) ? '🔑' : '', r.note ? '📝' : ''].join(' ');
+  const ic = [r.extra_beds ? `🛏+${r.extra_beds}` : '', r.note ? '📝' : ''].join(' ');
   return `<button class="tile ${s}" data-id="${r.id}"><b>${esc(r.name)}</b>
     <small>${r.occupied ? esc(r.guest) || 'Zajęty' : STATE_TXT[s]}</small><span class="ic">${ic}</span></button>`;
 }
@@ -239,7 +231,6 @@ async function roomSheet(id) {
     <div class="row"><label class="f">Gość / wesele</label><input type="text" data-f="guest" value="${esc(r.guest)}" ${dis} placeholder="np. wesele Kowalskich, p. Nowak"></div>
     <div class="row"><label class="f">Łóżka dostawkowe</label><div class="stepper">
       <button data-beds="-1" ${dis} aria-label="Mniej">−</button><b>${r.extra_beds}</b><button data-beds="1" ${dis} aria-label="Więcej">+</button></div></div>
-    <div class="row checks">${CHECKS.map(([k, l]) => `<label><input type="checkbox" data-c="${k}" ${r[k] ? 'checked' : ''} ${dis}>${l}</label>`).join('')}</div>
     <div class="row"><label class="f">Notatka</label><textarea data-f="note" ${dis} placeholder="np. zepsuta lampka, łóżeczko dla dziecka">${esc(r.note)}</textarea></div>
     ${canEdit() ? `<div class="row"><label class="f">Nazwa pokoju</label><input type="text" data-f="name" value="${esc(r.name)}"></div>` : ''}
     <div class="row"><label class="f">Historia pokoju</label><ul class="log" id="roomLog"><li class="meta">Wczytuję…</li></ul></div>`;
@@ -251,9 +242,9 @@ async function roomSheet(id) {
 $('#dlgBody').addEventListener('click', e => {
   const r = rooms.find(x => x.id === openId); if (!r) return;
   const act = e.target.dataset.act, beds = e.target.dataset.beds;
-  if (act === 'take') save(r.id, { occupied: true, keys_out: false, keys_back: false }, true);
-  if (act === 'free' && confirm(`Zwolnić ${r.name}? Gość, dostawki i odhaczenia zostaną wyczyszczone.`))
-    save(r.id, { occupied: false, guest: '', extra_beds: 0, ...Object.fromEntries(CHECKS.map(([k]) => [k, false])) });
+  if (act === 'take') save(r.id, { occupied: true }, true);
+  if (act === 'free' && confirm(`Zwolnić ${r.name}? Pokój będzie oznaczony jako posprzątany i gotowy, gość i dostawki zostaną wyczyszczone.`))
+    save(r.id, { occupied: false, guest: '', extra_beds: 0 });
   if (beds) {
     const v = r.extra_beds + +beds;
     if (v >= 0 && v <= 3) save(r.id, { extra_beds: v });
@@ -261,7 +252,6 @@ $('#dlgBody').addEventListener('click', e => {
 });
 $('#dlgBody').addEventListener('change', e => {
   const t = e.target;
-  if (t.dataset.c) save(openId, { [t.dataset.c]: t.checked });
   if (t.dataset.f && !t.closest('#teamForm')) save(openId, { [t.dataset.f]: t.value.trim() });
 });
 
@@ -270,7 +260,6 @@ const FIELDS = {
   occupied: v => v ? 'zajęty' : 'zwolniony',
   guest: v => `gość: ${v || 'brak'}`,
   extra_beds: v => `dostawki: ${v}`,
-  ...Object.fromEntries(CHECKS.map(([k, l]) => [k, v => `${l.toLowerCase()} ${v ? '✓' : '✗'}`])),
   note: v => `notatka: ${v || 'usunięta'}`,
   name: v => `nazwa: ${v}`,
 };
