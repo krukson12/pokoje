@@ -45,7 +45,7 @@
   .badge.free { background:var(--free); } .badge.dirty { background:var(--dirty); } .badge.occ { background:var(--occ); }
   .row { margin:12px 0; }
   label.f { display:block; font-size:13px; color:var(--mute); margin-bottom:4px; }
-  input[type=text], input[type=email], input[type=number], textarea, select { width:100%; font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  input[type=text], input[type=email], input[type=password], input[type=number], textarea, select { width:100%; font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
   textarea { min-height:60px; resize:vertical; }
   .big { width:100%; border:0; border-radius:10px; padding:12px; font-weight:600; color:#fff; font-size:17px; }
   .big.take { background:var(--occ); } .big.free { background:var(--free); }
@@ -61,7 +61,7 @@
   .meta { font-size:13px; color:var(--mute); }
   .btn { border:1px solid var(--line); background:#fff; border-radius:8px; padding:8px 12px; }
   .btn.pri { background:var(--ink); color:#fff; border-color:var(--ink); }
-  .staff { display:grid; grid-template-columns:1fr auto auto; gap:6px; align-items:center; font-size:14px; }
+  .staff { display:grid; grid-template-columns:1fr auto auto auto; gap:6px; align-items:center; font-size:14px; }
   #login { max-width:360px; margin:15vh auto; padding:24px 16px; text-align:center; }
   #login .btn { width:100%; margin-top:8px; padding:12px; }
   @media (max-width:420px) { #stats { grid-template-columns:repeat(2,1fr); } }
@@ -72,11 +72,12 @@
 <div id="login" hidden>
   <h1>Pokoje</h1>
   <p class="meta" id="loginMsg">Zaloguj się, żeby zobaczyć stan pokoi.</p>
-  <button class="btn pri" id="google">Zaloguj przez Google</button>
-  <form id="mailForm" class="row">
-    <input type="email" id="mail" placeholder="albo podaj e-mail" required>
-    <button class="btn">Wyślij link do logowania</button>
+  <form id="pwForm" class="row">
+    <input type="text" id="user" placeholder="login" autocomplete="username" autocapitalize="none" required>
+    <input type="password" id="pw" placeholder="hasło" autocomplete="current-password" required style="margin-top:8px">
+    <button class="btn pri">Zaloguj</button>
   </form>
+  <button class="btn" id="google">Zaloguj przez Google</button>
   <button class="btn" id="logout2" hidden>Wyloguj</button>
 </div>
 
@@ -119,7 +120,11 @@ const dlg = $('#dlg');
 
 let role = null, me = '', rooms = [], staff = [], settings = {}, filter = 'all', openId = null;
 const canEdit = () => role === 'edit';
-const who = email => staff.find(s => s.email === email)?.name || email || '?';
+// Login accounts live in auth as <login>@pokoje.local (see supabase/functions/pokoje-staff).
+const LOCAL = '@pokoje.local';
+const isLocal = email => email.endsWith(LOCAL);
+const shortEmail = email => isLocal(email) ? 'login: ' + email.slice(0, -LOCAL.length) : email;
+const who = email => staff.find(s => s.email === email)?.name || (email ? shortEmail(email) : '?');
 const state = r => r.occupied ? 'occ' : r.cleaned && r.prepared ? 'free' : 'dirty';
 const STATE_TXT = { free: 'Wolny, gotowy', dirty: 'Wolny, do przygotowania', occ: 'Zajęty' };
 const keysWithGuest = r => r.keys_out && !r.keys_back;
@@ -134,7 +139,7 @@ async function start() {
   if (!role) return showLogin(`Konto ${me} nie ma dostępu. Poproś kierownika o dodanie tego adresu w zakładce Zespół.`, true);
   $('#login').hidden = true;
   $('#app').hidden = false;
-  $('#who').textContent = `Zalogowano: ${me} (${canEdit() ? 'edycja' : 'tylko podgląd'})`;
+  $("#who").textContent = `Zalogowano: ${shortEmail(me)} (${canEdit() ? 'edycja' : 'tylko podgląd'})`;
   await load();
   sb.channel('pokoje').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pokoje_rooms' }, p => put(p.new)).subscribe();
   // Phones drop the websocket when asleep, so re-read on wake.
@@ -145,15 +150,15 @@ function showLogin(msg, signedIn) {
   $('#app').hidden = true;
   $('#login').hidden = false;
   if (msg) $('#loginMsg').textContent = msg;
-  $('#google').hidden = $('#mailForm').hidden = !!signedIn;
+  $('#google').hidden = $('#pwForm').hidden = !!signedIn;
   $('#logout2').hidden = !signedIn;
 }
 
 $('#google').onclick = () => sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: location.origin + location.pathname } });
-$('#mailForm').onsubmit = async e => {
+$('#pwForm').onsubmit = async e => {
   e.preventDefault();
-  const { error } = await sb.auth.signInWithOtp({ email: $('#mail').value.trim(), options: { emailRedirectTo: location.origin + location.pathname } });
-  $('#loginMsg').textContent = error ? 'Nie wysłano: ' + error.message : 'Sprawdź skrzynkę i kliknij link.';
+  const { error } = await sb.auth.signInWithPassword({ email: $("#user").value.trim().toLowerCase().replace(LOCAL, '') + LOCAL, password: $('#pw').value });
+  if (error) $('#loginMsg').textContent = /invalid/i.test(error.message) ? 'Zły login albo hasło.' : 'Nie zalogowano: ' + error.message;
 };
 $('#logout').onclick = $('#logout2').onclick = async () => { await sb.auth.signOut(); location.reload(); };
 sb.auth.onAuthStateChange(ev => { if (ev === 'SIGNED_IN' && !role) start(); });
@@ -290,25 +295,42 @@ function teamSheet() {
   $('#dlgBody').innerHTML = `
     <h3>Zespół<button class="x" aria-label="Zamknij">×</button></h3>
     <p class="meta">Edycja: zmienia stan pokoi i dodaje osoby. Podgląd: tylko widzi.</p>
-    <div class="staff">${staff.map(s => `<span>${esc(s.name || s.email)}<br><small class="meta">${esc(s.email)}</small></span>
+    <div class="staff">${staff.map(s => `<span>${esc(s.name || shortEmail(s.email))}<br><small class="meta">${esc(shortEmail(s.email))}</small></span>
       ${ed ? `<select data-role="${esc(s.email)}"><option value="edit" ${s.role === 'edit' ? 'selected' : ''}>edycja</option><option value="view" ${s.role === 'view' ? 'selected' : ''}>podgląd</option></select>
+      ${isLocal(s.email) ? `<button class="btn" data-pw="${esc(s.email)}">Hasło</button>` : '<span></span>'}
       <button class="btn" data-del="${esc(s.email)}" ${s.email === me ? 'disabled' : ''}>Usuń</button>`
-      : `<span class="meta">${s.role === 'edit' ? 'edycja' : 'podgląd'}</span><span></span>`}`).join('')}</div>
+      : `<span class="meta">${s.role === 'edit' ? 'edycja' : 'podgląd'}</span><span></span><span></span>`}`).join('')}</div>
     ${ed ? `<form id="teamForm" class="row">
-      <label class="f">Dodaj osobę (adres, którym loguje się do Google)</label>
-      <input type="email" name="email" placeholder="e-mail" required>
-      <div class="row" style="display:flex;gap:8px"><input type="text" name="name" placeholder="imię"><select name="role" style="width:auto"><option value="view">podgląd</option><option value="edit">edycja</option></select></div>
-      <button class="btn pri">Dodaj</button></form>
+      <label class="f">Dodaj osobę</label>
+      <input type="text" name="name" placeholder="imię i nazwisko">
+      <input type="text" name="login" placeholder="login, np. ania.k (albo adres Gmail)" autocapitalize="none" required style="margin-top:8px">
+      <input type="text" name="password" placeholder="hasło startowe, min. 8 znaków" autocomplete="off" style="margin-top:8px">
+      <p class="meta">Podaj login i hasło. Osoba z kontem Google może zamiast loginu podać adres Gmail, wtedy hasło nie jest potrzebne.</p>
+      <div style="display:flex;gap:8px"><select name="role" style="width:auto"><option value="view">podgląd</option><option value="edit">edycja</option></select>
+      <button class="btn pri">Dodaj</button></div></form>
     <div class="row"><label class="f">Ile mamy łóżek dostawkowych w sumie?</label>
       <input type="number" min="0" id="bedsTotal" value="${settings.extra_beds_total ?? ''}" placeholder="nie wiadomo"></div>` : ''}`;
+}
+
+// Login accounts need the service role, so they go through the edge function.
+async function staffFn(body) {
+  const { error } = await sb.functions.invoke('pokoje-staff', { body });
+  if (!error) return true;
+  const msg = await error.context?.json?.().then(j => j.error).catch(() => null);
+  alert(msg || 'Nie udało się: ' + error.message);
+  return false;
 }
 
 $('#dlgBody').addEventListener('submit', async e => {
   if (e.target.id !== 'teamForm') return;
   e.preventDefault();
-  const f = new FormData(e.target);
-  const { error } = await sb.from('pokoje_staff').insert({ email: f.get('email').trim().toLowerCase(), name: f.get('name').trim(), role: f.get('role') });
-  if (error) return alert(error.code === '23505' ? 'Ta osoba już jest na liście.' : 'Nie dodano: ' + error.message);
+  const f = Object.fromEntries(new FormData(e.target));
+  const login = f.login.trim().toLowerCase(), name = f.name.trim();
+  if (login.includes('@')) {
+    const { error } = await sb.from('pokoje_staff').insert({ email: login, name, role: f.role });
+    if (error) return alert(error.code === '23505' ? 'Ta osoba już jest na liście.' : 'Nie dodano: ' + error.message);
+  } else if (!await staffFn({ action: 'create', login, password: f.password, name, role: f.role })) return;
+  else alert(`Konto gotowe. Login: ${login}\nPrzekaż hasło osobiście.`);
   await load(); teamSheet();
 });
 $('#dlgBody').addEventListener('change', async e => {
@@ -318,8 +340,16 @@ $('#dlgBody').addEventListener('change', async e => {
   if (t.dataset.role || t.id === 'bedsTotal') { await load(); teamSheet(); }
 });
 $('#dlgBody').addEventListener('click', async e => {
-  const email = e.target.dataset.del;
-  if (email && confirm(`Usunąć ${email}?`)) { await sb.from('pokoje_staff').delete().eq('email', email); await load(); teamSheet(); }
+  const { del, pw } = e.target.dataset;
+  if (pw) {
+    const password = prompt(`Nowe hasło dla ${shortEmail(pw)} (min. 8 znaków):`);
+    if (password && await staffFn({ action: 'password', login: pw, password })) alert('Hasło zmienione.');
+  }
+  if (del && confirm(`Usunąć ${who(del)}? Straci dostęp od razu.`)) {
+    if (isLocal(del)) await staffFn({ action: 'delete', login: del });
+    else await sb.from('pokoje_staff').delete().eq('email', del);
+    await load(); teamSheet();
+  }
 });
 
 start();

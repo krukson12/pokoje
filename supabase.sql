@@ -12,6 +12,14 @@ language sql stable security definer set search_path = public as $$
 $$;
 grant execute on function pokoje_role() to authenticated;
 
+-- For the pokoje-staff edge function (service role only).
+create or replace function pokoje_user_id(p_email text) returns uuid
+language sql stable security definer set search_path = public as $$
+  select id from auth.users where email = lower(p_email)
+$$;
+revoke execute on function pokoje_user_id(text) from public, anon, authenticated;
+grant execute on function pokoje_user_id(text) to service_role;
+
 create table if not exists pokoje_rooms (
   id text primary key,
   building text not null check (building in ('dworek', 'hotel')),
