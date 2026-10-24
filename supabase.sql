@@ -98,4 +98,4 @@ insert into pokoje_rooms (id, building, sort, name)
   select 'h' || n, 'hotel', n, 'Hotel ' || n from generate_series(1, 27) n
 on conflict do nothing;
 insert into pokoje_settings (id) values (1) on conflict do nothing;
-insert into pokoje_staff (email, name, role) values ('krukson12@gmail.com', 'Miki', 'edit') on conflict do nothing;
+-- First editor (once, by hand): insert into pokoje_staff (email, name, role) values ('you@example.com', 'Imię', 'edit');
