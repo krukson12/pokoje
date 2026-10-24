@@ -94,7 +94,6 @@
       <button data-f="free">Wolne gotowe</button>
       <button data-f="dirty">Do przygotowania</button>
       <button data-f="occ">Zajęte</button>
-      <button data-f="keys">Klucze u gości</button>
     </nav>
     <div id="board"></div>
     <p class="meta" id="who"></p>
@@ -196,7 +195,7 @@ function render() {
     [`${beds} / ${settings.extra_beds_total ?? '?'}`, 'dostawki w użyciu'],
   ].map(([v, l]) => `<div class="stat"><b>${v}</b><small>${l}</small></div>`).join('');
 
-  const show = r => filter === 'all' || (filter === 'keys' ? keysWithGuest(r) : state(r) === filter);
+  const show = r => filter === 'all' || state(r) === filter;
   $('#board').innerHTML = BUILDINGS.map(([b, label]) => {
     const list = rooms.filter(r => r.building === b && show(r));
     return `<h2>${label}</h2>` + (list.length ? `<div class="grid">${list.map(tile).join('')}</div>` : '<p class="empty">Brak pokoi w tym widoku.</p>');

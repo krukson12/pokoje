@@ -87,7 +87,7 @@ do $$ begin
 exception when duplicate_object then null;
 end $$;
 
--- Seed: 4 rooms in the manor (one for newlyweds), 27 in the hotel. Rename in the app.
+-- Seed: 4 rooms in the manor (one for newlyweds), hotel rooms 1-28 without 11. Rename in the app.
 insert into pokoje_rooms (id, building, sort, name) values
   ('d1', 'dworek', 1, 'Dworek 1'),
   ('d2', 'dworek', 2, 'Dworek 2'),
@@ -95,7 +95,7 @@ insert into pokoje_rooms (id, building, sort, name) values
   ('d4', 'dworek', 4, 'Dworek 4 (małżeński)')
 on conflict do nothing;
 insert into pokoje_rooms (id, building, sort, name)
-  select 'h' || n, 'hotel', n, 'Hotel ' || n from generate_series(1, 27) n
+  select 'h' || n, 'hotel', n, 'Hotel ' || n from generate_series(1, 28) n where n <> 11
 on conflict do nothing;
 insert into pokoje_settings (id) values (1) on conflict do nothing;
 -- First editor (once, by hand): insert into pokoje_staff (email, name, role) values ('you@example.com', 'Imię', 'edit');
