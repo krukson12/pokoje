@@ -5,6 +5,8 @@ create table if not exists pokoje_staff (
   name text not null default '',
   role text not null check (role in ('edit', 'view'))
 );
+-- Owner rows can't be changed or removed from the app.
+alter table pokoje_staff add column if not exists locked boolean not null default false;
 
 create or replace function pokoje_role() returns text
 language sql stable security definer set search_path = public as $$
@@ -75,7 +77,16 @@ alter table pokoje_log enable row level security;
 drop policy if exists r on pokoje_staff;
 drop policy if exists w on pokoje_staff;
 create policy r on pokoje_staff for select to authenticated using (pokoje_role() is not null);
-create policy w on pokoje_staff for all to authenticated using (pokoje_role() = 'edit') with check (pokoje_role() = 'edit');
+drop policy if exists i on pokoje_staff;
+drop policy if exists u on pokoje_staff;
+drop policy if exists d on pokoje_staff;
+-- Editors manage others, never themselves (no locking yourself out) and never locked rows.
+create policy i on pokoje_staff for insert to authenticated with check (pokoje_role() = 'edit' and not locked);
+create policy u on pokoje_staff for update to authenticated
+  using (pokoje_role() = 'edit' and not locked and email <> lower(auth.jwt() ->> 'email'))
+  with check (not locked);
+create policy d on pokoje_staff for delete to authenticated
+  using (pokoje_role() = 'edit' and not locked and email <> lower(auth.jwt() ->> 'email'));
 
 drop policy if exists r on pokoje_rooms;
 drop policy if exists w on pokoje_rooms;
@@ -106,4 +117,4 @@ insert into pokoje_rooms (id, building, sort, name)
   select 'h' || n, 'hotel', n, 'Hotel ' || n from generate_series(1, 28) n where n <> 11
 on conflict do nothing;
 insert into pokoje_settings (id) values (1) on conflict do nothing;
--- First editor (once, by hand): insert into pokoje_staff (email, name, role) values ('you@example.com', 'Imię', 'edit');
+-- Owner (once, by hand): insert into pokoje_staff (email, name, role, locked) values ('you@example.com', 'Imię', 'edit', true);

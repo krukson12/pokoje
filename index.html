@@ -296,10 +296,10 @@ function teamSheet() {
     <h3>Zespół<button class="x" aria-label="Zamknij">×</button></h3>
     <p class="meta">Edycja: zmienia stan pokoi i dodaje osoby. Podgląd: tylko widzi.</p>
     <div class="staff">${staff.map(s => `<span>${esc(s.name || shortEmail(s.email))}<br><small class="meta">${esc(shortEmail(s.email))}</small></span>
-      ${ed ? `<select data-role="${esc(s.email)}"><option value="edit" ${s.role === 'edit' ? 'selected' : ''}>edycja</option><option value="view" ${s.role === 'view' ? 'selected' : ''}>podgląd</option></select>
+      ${ed && !s.locked && s.email !== me ? `<select data-role="${esc(s.email)}"><option value="edit" ${s.role === 'edit' ? 'selected' : ''}>edycja</option><option value="view" ${s.role === 'view' ? 'selected' : ''}>podgląd</option></select>
       ${isLocal(s.email) ? `<button class="btn" data-pw="${esc(s.email)}">Hasło</button>` : '<span></span>'}
-      <button class="btn" data-del="${esc(s.email)}" ${s.email === me ? 'disabled' : ''}>Usuń</button>`
-      : `<span class="meta">${s.role === 'edit' ? 'edycja' : 'podgląd'}</span><span></span><span></span>`}`).join('')}</div>
+      <button class="btn" data-del="${esc(s.email)}">Usuń</button>`
+      : `<span class="meta">${s.role === 'edit' ? 'edycja' : 'podgląd'}${s.locked ? ' 🔒' : s.email === me ? ' (Ty)' : ''}</span><span></span><span></span>`}`).join('')}</div>
     ${ed ? `<form id="teamForm" class="row">
       <label class="f">Dodaj osobę</label>
       <input type="text" name="name" placeholder="imię i nazwisko">
@@ -335,7 +335,10 @@ $('#dlgBody').addEventListener('submit', async e => {
 });
 $('#dlgBody').addEventListener('change', async e => {
   const t = e.target;
-  if (t.dataset.role) await sb.from('pokoje_staff').update({ role: t.value }).eq('email', t.dataset.role);
+  if (t.dataset.role) {
+    const { data } = await sb.from('pokoje_staff').update({ role: t.value }).eq('email', t.dataset.role).select();
+    if (!data?.length) alert('Nie zmieniono uprawnień.');
+  }
   if (t.id === 'bedsTotal') await sb.from('pokoje_settings').update({ extra_beds_total: t.value === '' ? null : +t.value }).eq('id', 1);
   if (t.dataset.role || t.id === 'bedsTotal') { await load(); teamSheet(); }
 });

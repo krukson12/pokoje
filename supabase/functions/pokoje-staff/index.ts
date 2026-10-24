@@ -51,6 +51,11 @@ Deno.serve(async req => {
     return reply({ ok: true });
   }
 
+  // Same rule as the RLS policies: nobody changes themselves or a locked (owner) row.
+  const caller = JSON.parse(atob((req.headers.get('Authorization') ?? '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).email;
+  const row = await (await admin(`/rest/v1/pokoje_staff?select=locked&email=eq.${encodeURIComponent(email)}`)).json();
+  if (email === String(caller).toLowerCase() || row[0]?.locked) return reply({ error: 'Tego konta nie można zmienić.' }, 403);
+
   const idRes = await admin('/rest/v1/rpc/pokoje_user_id', 'POST', { p_email: email });
   const id = idRes.ok ? await idRes.json() : null;
 
