@@ -118,3 +118,21 @@ insert into pokoje_rooms (id, building, sort, name)
 on conflict do nothing;
 insert into pokoje_settings (id) values (1) on conflict do nothing;
 -- Owner (once, by hand): insert into pokoje_staff (email, name, role, locked) values ('you@example.com', 'Imię', 'edit', true);
+
+-- Least privilege: RLS already filters rows, but Supabase's default grants are far wider
+-- (anon gets everything, TRUNCATE ignores RLS). Keep only what the app uses.
+revoke all on pokoje_staff, pokoje_rooms, pokoje_settings, pokoje_log from anon, authenticated;
+grant select on pokoje_staff, pokoje_rooms, pokoje_settings, pokoje_log to authenticated;
+grant insert, update, delete on pokoje_staff to authenticated;
+grant update on pokoje_rooms, pokoje_settings to authenticated;
+revoke all on sequence pokoje_log_id_seq from anon, authenticated;
+revoke execute on function pokoje_role() from public, anon;
+revoke execute on function pokoje_rooms_stamp() from public, anon, authenticated;
+
+-- Used by pokoje-staff after a password reset: logs that person out on every device.
+create or replace function pokoje_end_sessions(p_user uuid) returns void
+language sql security definer set search_path = public as $$
+  delete from auth.sessions where user_id = p_user
+$$;
+revoke execute on function pokoje_end_sessions(uuid) from public, anon, authenticated;
+grant execute on function pokoje_end_sessions(uuid) to service_role;

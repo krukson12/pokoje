@@ -63,7 +63,10 @@ Deno.serve(async req => {
     if (badPassword) return reply({ error: 'Hasło musi mieć od 8 do 72 znaków.' }, 400);
     if (!id) return reply({ error: 'Nie ma takiego konta.' }, 404);
     const u = await admin(`/auth/v1/admin/users/${id}`, 'PUT', { password });
-    return u.ok ? reply({ ok: true }) : reply({ error: 'Nie zmieniono hasła.' }, 500);
+    if (!u.ok) return reply({ error: 'Nie zmieniono hasła.' }, 500);
+    // A reset usually means a lost phone or a leaked password: end every open session.
+    await admin('/rest/v1/rpc/pokoje_end_sessions', 'POST', { p_user: id });
+    return reply({ ok: true });
   }
 
   if (b.action === 'delete') {
