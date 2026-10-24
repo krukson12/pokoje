@@ -9,7 +9,7 @@
 <link rel="icon" href="icon.svg">
 <style>
   :root { --bg:#f3f4f6; --card:#fff; --ink:#111827; --mute:#6b7280; --line:#e5e7eb;
-    --free:#16a34a; --free-bg:#dcfce7; --occ:#b91c1c; --occ-bg:#fee2e2; }
+    --free:#16a34a; --free-bg:#dcfce7; --occ:#b91c1c; --occ-bg:#fee2e2; --blk:#7c3aed; --blk-bg:#ede9fe; }
   * { box-sizing:border-box; }
   body { margin:0; font:16px/1.4 -apple-system,system-ui,sans-serif; background:var(--bg); color:var(--ink); }
   [hidden] { display:none !important; }
@@ -31,6 +31,22 @@
   .tile { text-align:left; border:0; border-left:5px solid; border-radius:10px; padding:8px 10px; min-height:72px; display:flex; flex-direction:column; gap:2px; color:var(--ink); }
   .tile.free { background:var(--free-bg); border-color:var(--free); }
   .tile.occ { background:var(--occ-bg); border-color:var(--occ); }
+  .tile.blk { background:var(--blk-bg); border-color:var(--blk); }
+  .tile:disabled { cursor:default; }
+  .tabs { display:flex; background:#e5e7eb; border-radius:10px; padding:3px; margin-bottom:12px; }
+  .tabs button { flex:1; border:0; background:none; border-radius:8px; padding:8px; font-weight:600; color:var(--mute); }
+  .tabs button.on { background:#fff; color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.1); }
+  .calhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
+  .calhead b { font-size:18px; text-transform:capitalize; }
+  .calhead button { width:40px; height:40px; border:1px solid var(--line); background:#fff; border-radius:8px; font-size:20px; }
+  #calGrid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  .dow { text-align:center; font-size:12px; color:var(--mute); padding:4px 0; }
+  .day { border:1px solid var(--line); background:#fff; border-radius:8px; min-height:52px; padding:4px; display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .day span { font-weight:600; }
+  .day small { font-size:11px; color:#fff; background:var(--blk); border-radius:99px; padding:0 6px; white-space:nowrap; }
+  .day.other { opacity:.4; } .day.past span { color:var(--mute); }
+  .day.today { border-color:var(--ink); } .day.sel { outline:3px solid var(--blk); outline-offset:-1px; }
+  .msg { background:var(--blk-bg); border-radius:8px; padding:8px 10px; font-size:14px; }
   .tile b { font-size:15px; }
   .tile small { color:var(--mute); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .tile .ic { font-size:13px; margin-top:auto; }
@@ -44,7 +60,7 @@
   .badge.free { background:var(--free); } .badge.occ { background:var(--occ); }
   .row { margin:12px 0; }
   label.f { display:block; font-size:13px; color:var(--mute); margin-bottom:4px; }
-  input[type=text], input[type=email], input[type=password], input[type=number], textarea, select { width:100%; font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  input[type=text], input[type=email], input[type=password], input[type=number], input[type=date], textarea, select { width:100%; font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
   textarea { min-height:60px; resize:vertical; }
   .big { width:100%; border:0; border-radius:10px; padding:12px; font-weight:600; color:#fff; font-size:17px; }
   .big.take { background:var(--occ); } .big.free { background:var(--free); }
@@ -84,13 +100,28 @@
     <button id="logout">Wyloguj</button>
   </header>
   <div class="wrap">
-    <div id="stats"></div>
-    <nav id="filters">
-      <button data-f="all" class="on">Wszystkie</button>
-      <button data-f="free">Wolne</button>
-      <button data-f="occ">Zajęte</button>
-    </nav>
-    <div id="board"></div>
+    <nav class="tabs" id="tabs"><button data-v="today" class="on">Dziś</button><button data-v="cal">Kalendarz</button></nav>
+    <div id="todayView">
+      <div id="stats"></div>
+      <nav id="filters">
+        <button data-f="all" class="on">Wszystkie</button>
+        <button data-f="free">Wolne</button>
+        <button data-f="occ">Zajęte</button>
+      </nav>
+      <div id="board"></div>
+    </div>
+    <div id="calView" hidden>
+      <div class="calhead"><button id="prevM" aria-label="Poprzedni miesiąc">‹</button><b id="monthName"></b><button id="nextM" aria-label="Następny miesiąc">›</button></div>
+      <div id="calGrid"></div>
+      <h2 id="dayName"></h2>
+      <p class="meta" id="dayInfo"></p>
+      <p class="msg" id="calMsg" hidden></p>
+      <div id="calTools" hidden>
+        <div class="row"><button class="btn pri" id="bulkBtn">Zablokuj kilka pokoi w hotelu</button></div>
+        <div class="row"><input type="text" id="blkNote" placeholder="Opis blokady, np. wesele Kowalskich"></div>
+      </div>
+      <div id="dayRooms"></div>
+    </div>
     <p class="meta" id="who"></p>
   </div>
 </div>
@@ -112,6 +143,14 @@ const when = t => new Date(t).toLocaleString('pl-PL', { day: 'numeric', month: '
 const dlg = $('#dlg');
 
 let role = null, me = '', rooms = [], staff = [], settings = {}, filter = 'all', openId = null;
+// Calendar: days are local YYYY-MM-DD strings; the venue and its staff are in Poland.
+const iso = d => d.toLocaleDateString('sv-SE');
+const todayISO = () => iso(new Date());
+const addDays = (s, n) => { const d = new Date(s + 'T12:00'); d.setDate(d.getDate() + n); return iso(d); };
+const plDay = s => new Date(s + 'T12:00').toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' });
+const shortDay = s => s.slice(8) + '.' + s.slice(5, 7);
+let view = 'today', month = todayISO().slice(0, 7), day = todayISO(), blocks = [];
+const blockOf = (id, d) => blocks.find(b => b.room_id === id && b.day === d);
 const canEdit = () => role === 'edit';
 // Login accounts live in auth as <login>@pokoje.local (see supabase/functions/pokoje-staff).
 const LOCAL = '@pokoje.local';
@@ -133,7 +172,11 @@ async function start() {
   $('#app').hidden = false;
   $("#who").textContent = `Zalogowano: ${shortEmail(me)} (${canEdit() ? 'edycja' : 'tylko podgląd'})`;
   await load();
-  sb.channel('pokoje').on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pokoje_rooms' }, p => put(p.new)).subscribe();
+  sb.channel('pokoje')
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pokoje_rooms' }, p => put(p.new))
+    // pokoje_blocks itself isn't broadcast (see supabase.sql); a counter on settings says "reload".
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pokoje_settings' }, p => { settings = p.new; loadBlocks(); })
+    .subscribe();
   // Phones drop the websocket when asleep, so re-read on wake.
   document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && load());
 }
@@ -166,6 +209,21 @@ async function load() {
   ]);
   if (r.error) return alert('Nie wczytano pokoi: ' + r.error.message);
   rooms = r.data; staff = s.data || []; settings = st.data || {};
+  await loadBlocks();
+}
+
+// Six weeks shown in the calendar, Monday first.
+function gridDays() {
+  const first = month + '-01', start = addDays(first, -((new Date(first + 'T12:00').getDay() + 6) % 7));
+  return Array.from({ length: 42 }, (_, i) => addDays(start, i));
+}
+
+// Blocks for the visible weeks plus today (the board shows today's blocks).
+async function loadBlocks() {
+  const g = gridDays(), t = todayISO();
+  const { data, error } = await sb.from('pokoje_blocks').select('*').gte('day', g[0] < t ? g[0] : t).lte('day', g[41] > t ? g[41] : t);
+  if (error) return alert('Nie wczytano kalendarza: ' + error.message);
+  blocks = data;
   render();
 }
 
@@ -199,12 +257,13 @@ function render() {
     const list = rooms.filter(r => r.building === b && show(r));
     return `<h2>${label}</h2>` + (list.length ? `<div class="grid">${list.map(tile).join('')}</div>` : '<p class="empty">Brak pokoi w tym widoku.</p>');
   }).join('');
+  if (view === 'cal') renderCal();
   if (openId && dlg.open) roomSheet(openId);
 }
 
 function tile(r) {
   const s = state(r);
-  const ic = [r.extra_beds ? `🛏+${r.extra_beds}` : '', r.note ? '📝' : ''].join(' ');
+  const ic = [r.extra_beds ? `🛏+${r.extra_beds}` : '', r.note ? '📝' : '', blockOf(r.id, todayISO()) ? '📅' : ''].join(' ');
   return `<button class="tile ${s}" data-id="${r.id}"><b>${esc(r.name)}</b>
     <small>${r.occupied ? esc(r.guest) || 'Zajęty' : STATE_TXT[s]}</small><span class="ic">${ic}</span></button>`;
 }
@@ -219,6 +278,89 @@ $('#filters').onclick = e => {
 dlg.onclose = () => { openId = null; };
 dlg.onclick = e => { if (e.target === dlg || e.target.closest('.x')) dlg.close(); };
 
+// ── Calendar ──
+function renderCal() {
+  const t = todayISO(), [y, m] = month.split('-').map(Number), counts = {};
+  blocks.forEach(b => { counts[b.day] = (counts[b.day] || 0) + 1; });
+  $('#monthName').textContent = new Date(y, m - 1, 15).toLocaleDateString('pl-PL', { month: 'long', year: 'numeric' });
+  $('#calGrid').innerHTML = ['pn', 'wt', 'śr', 'cz', 'pt', 'so', 'nd'].map(d => `<span class="dow">${d}</span>`).join('') +
+    gridDays().map(d => `<button class="day${d.slice(0, 7) !== month ? ' other' : ''}${d < t ? ' past' : ''}${d === t ? ' today' : ''}${d === day ? ' sel' : ''}" data-day="${d}">
+      <span>${+d.slice(8)}</span>${counts[d] ? `<small>${counts[d]}</small>` : ''}</button>`).join('');
+  const ed = canEdit() && day >= t;
+  $('#dayName').textContent = plDay(day);
+  $('#dayInfo').textContent = `Zablokowane: ${counts[day] || 0} z ${rooms.length}. ` +
+    (ed ? 'Dotknij pokoju, żeby go zablokować albo odblokować.' : day < t ? 'Ten dzień minął.' : '');
+  $('#calTools').hidden = !ed;
+  $('#dayRooms').innerHTML = BUILDINGS.map(([b, label]) => `<h2>${label}</h2><div class="grid">${rooms.filter(r => r.building === b).map(r => {
+    const k = blockOf(r.id, day);
+    return `<button class="tile ${k ? 'blk' : 'free'}" data-blk="${r.id}" ${ed ? '' : 'disabled'}><b>${esc(r.name)}</b>
+      <small>${k ? esc(k.note) || 'Zablokowany' : 'Wolny'}</small>${k ? `<span class="ic meta">${esc(who(k.by))}</span>` : ''}</button>`;
+  }).join('')}</div>`).join('');
+}
+
+function calMsg(text) { $('#calMsg').hidden = !text; $('#calMsg').textContent = text; }
+
+$('#tabs').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  view = b.dataset.v;
+  $('#tabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  $('#todayView').hidden = view !== 'today';
+  $('#calView').hidden = view !== 'cal';
+  render();
+};
+const shiftMonth = n => {
+  const [y, m] = month.split('-').map(Number);
+  month = iso(new Date(y, m - 1 + n, 15)).slice(0, 7);
+  day = month === todayISO().slice(0, 7) ? todayISO() : month + '-01';
+  calMsg('');
+  loadBlocks();
+};
+$('#prevM').onclick = () => shiftMonth(-1);
+$('#nextM').onclick = () => shiftMonth(1);
+$('#calGrid').onclick = e => {
+  const b = e.target.closest('[data-day]'); if (!b) return;
+  day = b.dataset.day;
+  calMsg('');
+  if (day.slice(0, 7) !== month) { month = day.slice(0, 7); return loadBlocks(); }
+  renderCal();
+};
+$('#dayRooms').onclick = async e => {
+  const b = e.target.closest('[data-blk]'); if (!b || b.disabled) return;
+  const k = blockOf(b.dataset.blk, day);
+  const { error } = k
+    ? await sb.from('pokoje_blocks').delete().eq('room_id', k.room_id).eq('day', day)
+    : await sb.from('pokoje_blocks').insert({ room_id: b.dataset.blk, day, note: $('#blkNote').value.trim() });
+  if (error) alert(error.code === '23505' ? 'Ktoś przed chwilą zablokował ten pokój.' : 'Nie zapisano: ' + error.message);
+  loadBlocks();
+};
+
+$('#bulkBtn').onclick = () => {
+  openId = null;
+  const t = todayISO();
+  $('#dlgBody').innerHTML = `<h3>Zablokuj pokoje w hotelu<button class="x" aria-label="Zamknij">×</button></h3>
+    <p class="meta">Blokujemy pierwsze wolne pokoje według numerów. Na przykład 10 pokoi to Hotel 1 do 10, a jeśli któryś jest już zajęty, bierzemy kolejny.</p>
+    <form id="bulkForm">
+      <div class="row" style="display:flex;gap:8px">
+        <div style="flex:1"><label class="f">Od dnia</label><input type="date" name="from" min="${t}" value="${day}" required></div>
+        <div style="flex:1"><label class="f">Do dnia (włącznie)</label><input type="date" name="to" min="${t}" value="${day}" required></div>
+      </div>
+      <div class="row"><label class="f">Ile pokoi</label><input type="number" name="count" min="1" max="${rooms.filter(r => r.building === 'hotel').length}" required></div>
+      <div class="row"><label class="f">Opis</label><input type="text" name="note" value="${esc($('#blkNote').value)}" placeholder="np. wesele Kowalskich"></div>
+      <button class="btn pri">Zablokuj</button>
+    </form>`;
+  dlg.showModal();
+};
+$('#dlgBody').addEventListener('submit', async e => {
+  if (e.target.id !== 'bulkForm') return;
+  e.preventDefault();
+  const f = Object.fromEntries(new FormData(e.target));
+  const { data, error } = await sb.rpc('pokoje_block_hotel', { p_from: f.from, p_to: f.to, p_count: +f.count, p_note: f.note });
+  if (error) return alert(error.message);
+  dlg.close();
+  calMsg(`Zablokowano ${data.length} pokoi (${f.from === f.to ? shortDay(f.from) : shortDay(f.from) + ' do ' + shortDay(f.to)}): ${data.join(', ')}.`);
+  loadBlocks();
+});
+
 // ── Room sheet ──
 async function roomSheet(id) {
   const r = rooms.find(x => x.id === id), s = state(r), dis = canEdit() ? '' : 'disabled';
@@ -227,6 +369,7 @@ async function roomSheet(id) {
   $('#dlgBody').innerHTML = `
     <h3>${esc(r.name)} <span class="badge ${s}">${STATE_TXT[s]}</span><button class="x" aria-label="Zamknij">×</button></h3>
     <div class="meta">${r.updated_by ? `Ostatnia zmiana: ${esc(who(r.updated_by))}, ${when(r.updated_at)}` : ''}</div>
+    ${(k => k ? `<p class="msg">📅 Zablokowany na dziś${k.note ? ': ' + esc(k.note) : ''}</p>` : '')(blockOf(r.id, todayISO()))}
     ${canEdit() ? `<div class="row">${r.occupied
       ? '<button class="big free" data-act="free">Zwolnij pokój</button>'
       : '<button class="big take" data-act="take">Zajmij pokój</button>'}</div>` : ''}

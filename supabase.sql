@@ -136,3 +136,73 @@ language sql security definer set search_path = public as $$
 $$;
 revoke execute on function pokoje_end_sessions(uuid) from public, anon, authenticated;
 grant execute on function pokoje_end_sessions(uuid) to service_role;
+
+-- ── Calendar: rooms blocked for future days ──
+create table if not exists pokoje_blocks (
+  room_id text not null references pokoje_rooms (id),
+  day date not null,
+  note text not null default '',
+  by text default lower(auth.jwt() ->> 'email'),
+  at timestamptz not null default now(),
+  primary key (room_id, day)
+);
+create index if not exists pokoje_blocks_day on pokoje_blocks (day);
+alter table pokoje_blocks enable row level security;
+
+-- Today in the venue's timezone; past days stay as they were.
+create or replace function pokoje_today() returns date language sql stable as $$
+  select (now() at time zone 'Europe/Warsaw')::date
+$$;
+
+drop policy if exists r on pokoje_blocks;
+drop policy if exists i on pokoje_blocks;
+drop policy if exists d on pokoje_blocks;
+create policy r on pokoje_blocks for select to authenticated using (pokoje_role() is not null);
+create policy i on pokoje_blocks for insert to authenticated
+  with check (pokoje_role() = 'edit' and day >= pokoje_today() and by = lower(auth.jwt() ->> 'email'));
+create policy d on pokoje_blocks for delete to authenticated using (pokoje_role() = 'edit' and day >= pokoje_today());
+revoke all on pokoje_blocks from anon, authenticated;
+grant select, insert, delete on pokoje_blocks to authenticated;
+
+-- Block the first p_count hotel rooms (by number) that are free on every day of the range.
+-- One call at a time, so two people blocking at once never pick the same rooms.
+create or replace function pokoje_block_hotel(p_from date, p_to date, p_count int, p_note text)
+returns text[] language plpgsql security invoker set search_path = public as $$
+declare picked text[];
+begin
+  if pokoje_role() is distinct from 'edit' then raise exception 'Brak uprawnień.'; end if;
+  if p_from < pokoje_today() or p_to < p_from or p_to > p_from + 60 then raise exception 'Zły zakres dat.'; end if;
+  if p_count is null or p_count < 1 then raise exception 'Podaj liczbę pokoi.'; end if;
+  perform pg_advisory_xact_lock(hashtext('pokoje_blocks'));
+  select array_agg(id order by sort) into picked from (
+    select r.id, r.sort from pokoje_rooms r
+    where r.building = 'hotel'
+      and not exists (select 1 from pokoje_blocks b where b.room_id = r.id and b.day between p_from and p_to)
+      and not (r.occupied and p_from = pokoje_today())
+    order by r.sort limit p_count) f;
+  if coalesce(array_length(picked, 1), 0) < p_count then
+    raise exception 'W tym terminie wolnych pokoi w hotelu jest tylko %.', coalesce(array_length(picked, 1), 0);
+  end if;
+  insert into pokoje_blocks (room_id, day, note)
+    select id, d::date, coalesce(trim(p_note), '') from unnest(picked) id, generate_series(p_from, p_to, interval '1 day') d;
+  return (select array_agg(name order by sort) from pokoje_rooms where id = any(picked));
+end $$;
+revoke execute on function pokoje_block_hotel(date, date, int, text) from public, anon;
+grant execute on function pokoje_block_hotel(date, date, int, text) to authenticated;
+
+-- Live updates go through a counter on pokoje_settings: realtime DELETE events skip RLS
+-- and would show outsiders which room was unblocked, UPDATE events don't.
+alter table pokoje_settings add column if not exists blocks_rev bigint not null default 0;
+create or replace function pokoje_blocks_bump() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  update pokoje_settings set blocks_rev = blocks_rev + 1 where id = 1;
+  return null;
+end $$;
+revoke execute on function pokoje_blocks_bump() from public, anon, authenticated;
+drop trigger if exists pokoje_blocks_bump on pokoje_blocks;
+create trigger pokoje_blocks_bump after insert or delete on pokoje_blocks for each statement execute function pokoje_blocks_bump();
+do $$ begin
+  alter publication supabase_realtime add table pokoje_settings;
+exception when duplicate_object then null;
+end $$;
