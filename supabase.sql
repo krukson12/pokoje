@@ -171,7 +171,9 @@ returns text[] language plpgsql security invoker set search_path = public as $$
 declare picked text[];
 begin
   if pokoje_role() is distinct from 'edit' then raise exception 'Brak uprawnień.'; end if;
-  if p_from < pokoje_today() or p_to < p_from or p_to > p_from + 60 then raise exception 'Zły zakres dat.'; end if;
+  if p_from < pokoje_today() then raise exception 'Nie można blokować dni, które minęły.'; end if;
+  if p_to < p_from then raise exception 'Data „do” jest wcześniejsza niż „od”.'; end if;
+  if p_to > p_from + 60 then raise exception 'Naraz można zablokować najwyżej 61 dni.'; end if;
   if p_count is null or p_count < 1 then raise exception 'Podaj liczbę pokoi.'; end if;
   perform pg_advisory_xact_lock(hashtext('pokoje_blocks'));
   select array_agg(id order by sort) into picked from (
