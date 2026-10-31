@@ -256,10 +256,10 @@ revoke execute on function pokoje_events_bump() from public, anon, authenticated
 drop trigger if exists pokoje_events_bump on pokoje_events;
 create trigger pokoje_events_bump after insert or update or delete on pokoje_events for each statement execute function pokoje_events_bump();
 
--- ── Event attachments (oferta, kosztorys): PDF and DOCX in a private bucket ──
+-- ── Event attachments (oferta, kosztorys, zdjęcia): PDF, DOCX, JPG, HEIC in a private bucket ──
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('pokoje-files', 'pokoje-files', false, 20971520,
-  array['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'])
+  array['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'image/jpeg', 'image/heic'])
 on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
 
 drop policy if exists pokoje_files_r on storage.objects;

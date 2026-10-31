@@ -180,7 +180,10 @@ const EVENT_COLS = {
 };
 const KIND = { impreza: 'Impreza', komunia: 'Komunia' };
 let events = [], files = [];
-const FILE_TYPES = { pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
+const FILE_TYPES = {
+  pdf: 'application/pdf', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  jpg: 'image/jpeg', jpeg: 'image/jpeg', heic: 'image/heic',
+};
 const eventsOn = d => events.filter(e => e.day === d);
 const canEdit = () => role === 'edit';
 // Login accounts live in auth as <login>@pokoje.local (see supabase/functions/pokoje-staff).
@@ -427,7 +430,7 @@ function renderEv() {
     <div class="evh"><b>${esc(evTitle(e))}</b><span class="badge ${e.kind}">${KIND[e.kind]}</span>${canEdit() ? `<button class="btn" data-ev="${e.id}">Edytuj</button>` : ''}</div>
     <dl>${EVENT_COLS[e.kind].filter(c => e.data[c]).map(c => `<dt>${esc(c)}</dt><dd>${c === 'tel' ? telLinks(e.data[c]) : esc(e.data[c])}</dd>`).join('')}</dl>
     <div class="files">${files.filter(f => f.event_id === e.id).map(f => `<span class="file"><a href="#" data-file="${f.id}">📎 ${esc(f.name)}</a>${canEdit() ? `<button data-delfile="${f.id}" aria-label="Usuń plik">×</button>` : ''}</span>`).join('')}
-      ${canEdit() ? `<label class="btn up">Dodaj plik (PDF, DOCX)<input type="file" data-up="${e.id}" accept=".pdf,.docx,${Object.values(FILE_TYPES)}" multiple hidden></label>` : ''}</div></div>`).join('')
+      ${canEdit() ? `<label class="btn up">Dodaj plik (PDF, DOCX, JPG, HEIC)<input type="file" data-up="${e.id}" accept="${Object.keys(FILE_TYPES).map(x => '.' + x)},${[...new Set(Object.values(FILE_TYPES))]}" multiple hidden></label>` : ''}</div></div>`).join('')
     : '<p class="empty">Brak imprez tego dnia.</p>';
 }
 
@@ -505,10 +508,10 @@ $('#evList').addEventListener('change', async e => {
   label.firstChild.textContent = 'Wysyłam…';
   for (const file of input.files) {
     const ext = file.name.split('.').pop().toLowerCase();
-    if (!FILE_TYPES[ext]) { problems.push(`${file.name}: tylko PDF albo DOCX`); continue; }
+    if (!FILE_TYPES[ext]) { problems.push(`${file.name}: tylko PDF, DOCX, JPG albo HEIC`); continue; }
     if (file.size > 20 * 1024 * 1024) { problems.push(`${file.name}: większy niż 20 MB`); continue; }
     const path = `${eventId}/${crypto.randomUUID()}.${ext}`;
-    // Re-typed copy: some phones send DOCX with no type, and the upload uses the file's own type.
+    // Re-typed copy: some phones send DOCX/HEIC with no type, and the upload uses the file's own type.
     const up = await sb.storage.from('pokoje-files').upload(path, file.slice(0, file.size, FILE_TYPES[ext]), { contentType: FILE_TYPES[ext] });
     if (up.error) { problems.push(`${file.name}: ${up.error.message}`); continue; }
     const row = await sb.from('pokoje_files').insert({ event_id: eventId, name: file.name, path, size: file.size });
