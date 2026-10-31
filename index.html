@@ -39,13 +39,22 @@
   .calhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
   .calhead b { font-size:18px; text-transform:capitalize; }
   .calhead button { width:40px; height:40px; border:1px solid var(--line); background:#fff; border-radius:8px; font-size:20px; }
-  #calGrid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
+  #calGrid, #evGrid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
   .dow { text-align:center; font-size:12px; color:var(--mute); padding:4px 0; }
   .day { border:1px solid var(--line); background:#fff; border-radius:8px; min-height:52px; padding:4px; display:flex; flex-direction:column; align-items:center; gap:2px; }
   .day span { font-weight:600; }
   .day small { font-size:11px; color:#fff; background:var(--blk); border-radius:99px; padding:0 6px; white-space:nowrap; }
   .day.other { opacity:.4; } .day.past span { color:var(--mute); }
   .day.today { border-color:var(--ink); } .day.sel { outline:3px solid var(--blk); outline-offset:-1px; }
+  .day small.ev { background:#b45309; }
+  .ev { background:var(--card); border-radius:10px; padding:10px 12px; margin-bottom:8px; border-left:5px solid #b45309; }
+  .ev.komunia { border-left-color:#2563eb; }
+  .evh { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
+  .evh .btn { margin-left:auto; padding:4px 10px; font-size:14px; }
+  .badge.impreza { background:#b45309; } .badge.komunia { background:#2563eb; }
+  .ev dl { display:grid; grid-template-columns:auto 1fr; gap:2px 10px; margin:0; font-size:14px; }
+  .ev dt { color:var(--mute); } .ev dd { margin:0; overflow-wrap:anywhere; }
+  #todayEv:empty { display:none; }
   .msg { background:var(--blk-bg); border-radius:8px; padding:8px 10px; font-size:14px; }
   .tile b { font-size:15px; }
   .tile small { color:var(--mute); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
@@ -100,8 +109,9 @@
     <button id="logout">Wyloguj</button>
   </header>
   <div class="wrap">
-    <nav class="tabs" id="tabs"><button data-v="today" class="on">Dziś</button><button data-v="cal">Kalendarz</button></nav>
+    <nav class="tabs" id="tabs"><button data-v="today" class="on">Dziś</button><button data-v="cal">Kalendarz</button><button data-v="ev">Imprezy</button></nav>
     <div id="todayView">
+      <p class="msg" id="todayEv"></p>
       <div id="stats"></div>
       <nav id="filters">
         <button data-f="all" class="on">Wszystkie</button>
@@ -121,6 +131,13 @@
         <div class="row"><input type="text" id="blkNote" placeholder="Opis blokady, np. wesele Kowalskich"></div>
       </div>
       <div id="dayRooms"></div>
+    </div>
+    <div id="evView" hidden>
+      <div class="calhead"><button id="evPrev" aria-label="Poprzedni miesiąc">‹</button><b id="evMonth"></b><button id="evNext" aria-label="Następny miesiąc">›</button></div>
+      <div id="evGrid"></div>
+      <h2 id="evDayName"></h2>
+      <div class="row" id="evTools" hidden><button class="btn pri" id="evAdd">Dodaj imprezę</button></div>
+      <div id="evList"></div>
     </div>
     <p class="meta" id="who"></p>
   </div>
@@ -151,6 +168,14 @@ const plDay = s => new Date(s + 'T12:00').toLocaleDateString('pl-PL', { weekday:
 const shortDay = s => s.slice(8) + '.' + s.slice(5, 7);
 let view = 'today', month = todayISO().slice(0, 7), day = todayISO(), blocks = [];
 const blockOf = (id, d) => blocks.find(b => b.room_id === id && b.day === d);
+// Column names exactly as in the Excel sheets "2026" and "Komunie 2026".
+const EVENT_COLS = {
+  impreza: ['Jaka uroczystość', 'Nazwisko', 'tel', 'liczba osób', 'czy zadatek', 'czy jest umowa podpisana', 'inne'],
+  komunia: ['nazwisko', 'tel', 'liczba osób', 'czy kolacja', 'czy umowa', 'zadatek', 'inne'],
+};
+const KIND = { impreza: 'Impreza', komunia: 'Komunia' };
+let events = [];
+const eventsOn = d => events.filter(e => e.day === d);
 const canEdit = () => role === 'edit';
 // Login accounts live in auth as <login>@pokoje.local (see supabase/functions/pokoje-staff).
 const LOCAL = '@pokoje.local';
@@ -219,11 +244,15 @@ function gridDays() {
 }
 
 // Blocks for the visible weeks plus today (the board shows today's blocks).
+// Events too, for the same range.
 async function loadBlocks() {
-  const g = gridDays(), t = todayISO();
-  const { data, error } = await sb.from('pokoje_blocks').select('*').gte('day', g[0] < t ? g[0] : t).lte('day', g[41] > t ? g[41] : t);
-  if (error) return alert('Nie wczytano kalendarza: ' + error.message);
-  blocks = data;
+  const g = gridDays(), t = todayISO(), from = g[0] < t ? g[0] : t, to = g[41] > t ? g[41] : t;
+  const [b, ev] = await Promise.all([
+    sb.from('pokoje_blocks').select('*').gte('day', from).lte('day', to),
+    sb.from('pokoje_events').select('*').gte('day', from).lte('day', to).order('day').order('kind').order('sort').order('id'),
+  ]);
+  if (b.error || ev.error) return alert('Nie wczytano kalendarza: ' + (b.error || ev.error).message);
+  blocks = b.data; events = ev.data;
   render();
 }
 
@@ -257,7 +286,10 @@ function render() {
     const list = rooms.filter(r => r.building === b && show(r));
     return `<h2>${label}</h2>` + (list.length ? `<div class="grid">${list.map(tile).join('')}</div>` : '<p class="empty">Brak pokoi w tym widoku.</p>');
   }).join('');
+  const te = eventsOn(todayISO());
+  $('#todayEv').textContent = te.length ? 'Dziś: ' + te.map(evTitle).join(', ') : '';
   if (view === 'cal') renderCal();
+  if (view === 'ev') renderEv();
   if (openId && dlg.open) roomSheet(openId);
 }
 
@@ -280,12 +312,10 @@ dlg.onclick = e => { if (e.target === dlg || e.target.closest('.x')) dlg.close()
 
 // ── Calendar ──
 function renderCal() {
-  const t = todayISO(), [y, m] = month.split('-').map(Number), counts = {};
+  const t = todayISO(), counts = {};
   blocks.forEach(b => { counts[b.day] = (counts[b.day] || 0) + 1; });
-  $('#monthName').textContent = new Date(y, m - 1, 15).toLocaleDateString('pl-PL', { month: 'long', year: 'numeric' });
-  $('#calGrid').innerHTML = ['pn', 'wt', 'śr', 'cz', 'pt', 'so', 'nd'].map(d => `<span class="dow">${d}</span>`).join('') +
-    gridDays().map(d => `<button class="day${d.slice(0, 7) !== month ? ' other' : ''}${d < t ? ' past' : ''}${d === t ? ' today' : ''}${d === day ? ' sel' : ''}" data-day="${d}">
-      <span>${+d.slice(8)}</span>${counts[d] ? `<small>${counts[d]}</small>` : ''}</button>`).join('');
+  $('#monthName').textContent = monthTitle();
+  $('#calGrid').innerHTML = gridHtml(counts, '');
   const ed = canEdit() && day >= t;
   $('#dayName').textContent = plDay(day);
   $('#dayInfo').textContent = `Zablokowane: ${counts[day] || 0} z ${rooms.length}. ` +
@@ -298,6 +328,15 @@ function renderCal() {
   }).join('')}</div>`).join('');
 }
 
+// Month grid shared by both calendars; counts = {day: number shown on the day}.
+function gridHtml(counts, cls) {
+  const t = todayISO();
+  return ['pn', 'wt', 'śr', 'cz', 'pt', 'so', 'nd'].map(d => `<span class="dow">${d}</span>`).join('') +
+    gridDays().map(d => `<button class="day${d.slice(0, 7) !== month ? ' other' : ''}${d < t ? ' past' : ''}${d === t ? ' today' : ''}${d === day ? ' sel' : ''}" data-day="${d}">
+      <span>${+d.slice(8)}</span>${counts[d] ? `<small class="${cls}">${counts[d]}</small>` : ''}</button>`).join('');
+}
+const monthTitle = () => { const [y, m] = month.split('-').map(Number); return new Date(y, m - 1, 15).toLocaleDateString('pl-PL', { month: 'long', year: 'numeric' }); };
+
 function calMsg(text) { $('#calMsg').hidden = !text; $('#calMsg').textContent = text; }
 
 $('#tabs').onclick = e => {
@@ -306,6 +345,7 @@ $('#tabs').onclick = e => {
   $('#tabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
   $('#todayView').hidden = view !== 'today';
   $('#calView').hidden = view !== 'cal';
+  $('#evView').hidden = view !== 'ev';
   render();
 };
 const shiftMonth = n => {
@@ -317,13 +357,15 @@ const shiftMonth = n => {
 };
 $('#prevM').onclick = () => shiftMonth(-1);
 $('#nextM').onclick = () => shiftMonth(1);
-$('#calGrid').onclick = e => {
+$('#calGrid').onclick = $('#evGrid').onclick = e => {
   const b = e.target.closest('[data-day]'); if (!b) return;
   day = b.dataset.day;
   calMsg('');
   if (day.slice(0, 7) !== month) { month = day.slice(0, 7); return loadBlocks(); }
-  renderCal();
+  render();
 };
+$('#evPrev').onclick = () => shiftMonth(-1);
+$('#evNext').onclick = () => shiftMonth(1);
 $('#dayRooms').onclick = async e => {
   const b = e.target.closest('[data-blk]'); if (!b || b.disabled) return;
   const k = blockOf(b.dataset.blk, day);
@@ -358,6 +400,71 @@ $('#dlgBody').addEventListener('submit', async e => {
   if (error) return alert(error.message);
   dlg.close();
   calMsg(`Zablokowano ${data.length} pokoi (${f.from === f.to ? shortDay(f.from) : shortDay(f.from) + ' do ' + shortDay(f.to)}): ${data.join(', ')}.`);
+  loadBlocks();
+});
+
+// ── Events ──
+const evTitle = e => e.data['Jaka uroczystość'] || e.data.nazwisko || e.data.Nazwisko || KIND[e.kind];
+const telLinks = v => esc(v).split(/([;,]\s*)/).map(p => /\d{6,}/.test(p.replace(/\s/g, '')) ? `<a href="tel:${p.replace(/[^\d+]/g, '')}">${p}</a>` : p).join('');
+
+function renderEv() {
+  const counts = {};
+  events.forEach(e => { counts[e.day] = (counts[e.day] || 0) + 1; });
+  $('#evMonth').textContent = monthTitle();
+  $('#evGrid').innerHTML = gridHtml(counts, 'ev');
+  $('#evDayName').textContent = plDay(day);
+  $('#evTools').hidden = !canEdit();
+  const list = eventsOn(day);
+  $('#evList').innerHTML = list.length ? list.map(e => `<div class="ev ${e.kind}">
+    <div class="evh"><b>${esc(evTitle(e))}</b><span class="badge ${e.kind}">${KIND[e.kind]}</span>${canEdit() ? `<button class="btn" data-ev="${e.id}">Edytuj</button>` : ''}</div>
+    <dl>${EVENT_COLS[e.kind].filter(c => e.data[c]).map(c => `<dt>${esc(c)}</dt><dd>${c === 'tel' ? telLinks(e.data[c]) : esc(e.data[c])}</dd>`).join('')}</dl></div>`).join('')
+    : '<p class="empty">Brak imprez tego dnia.</p>';
+}
+
+const evFields = (kind, data) => EVENT_COLS[kind].map(c => `<div class="row"><label class="f">${esc(c)}</label>${c === 'inne'
+  ? `<textarea data-col="${esc(c)}">${esc(data[c])}</textarea>` : `<input type="text" data-col="${esc(c)}" value="${esc(data[c])}">`}</div>`).join('');
+const evValues = () => Object.fromEntries([...document.querySelectorAll('#evForm [data-col]')].map(x => [x.dataset.col, x.value.trim()]).filter(([, v]) => v));
+
+function evSheet(e) {
+  openId = null;
+  const kind = e?.kind || 'impreza';
+  $('#dlgBody').innerHTML = `<h3>${e ? 'Edytuj imprezę' : 'Nowa impreza'}<button class="x" aria-label="Zamknij">×</button></h3>
+    <form id="evForm" data-id="${e?.id || ''}">
+      <div class="row" style="display:flex;gap:8px">
+        <div style="flex:1"><label class="f">Data</label><input type="date" name="day" value="${e?.day || day}" required></div>
+        <div style="flex:1"><label class="f">Rodzaj</label><select name="kind">${Object.entries(KIND).map(([k, l]) => `<option value="${k}" ${k === kind ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+      </div>
+      <div id="evFields">${evFields(kind, e?.data || {})}</div>
+      <div style="display:flex;gap:8px"><button class="btn pri">Zapisz</button>${e ? '<button type="button" class="btn" id="evDel">Usuń</button>' : ''}</div>
+    </form>`;
+  dlg.showModal();
+}
+
+$('#evAdd').onclick = () => evSheet(null);
+$('#evList').onclick = e => { const b = e.target.closest('[data-ev]'); if (b) evSheet(events.find(x => x.id === +b.dataset.ev)); };
+$('#dlgBody').addEventListener('change', e => {
+  // Switching kind keeps whatever both column sets share (tel, liczba osób, inne).
+  if (e.target.name === 'kind' && e.target.closest('#evForm')) $('#evFields').innerHTML = evFields(e.target.value, evValues());
+});
+$('#dlgBody').addEventListener('submit', async e => {
+  if (e.target.id !== 'evForm') return;
+  e.preventDefault();
+  const f = e.target, data = evValues(), id = +f.dataset.id;
+  if (!Object.keys(data).length) return alert('Wypełnij przynajmniej jedno pole.');
+  const row = { day: f.day.value, kind: f.kind.value, data };
+  const { error } = id ? await sb.from('pokoje_events').update(row).eq('id', id) : await sb.from('pokoje_events').insert({ ...row, sort: 100000 });
+  if (error) return alert('Nie zapisano: ' + error.message);
+  dlg.close();
+  day = row.day; month = day.slice(0, 7);
+  loadBlocks();
+});
+$('#dlgBody').addEventListener('click', async e => {
+  if (e.target.id !== 'evDel') return;
+  const id = +$('#evForm').dataset.id;
+  if (!confirm('Usunąć tę imprezę? Tego nie da się cofnąć.')) return;
+  const { error } = await sb.from('pokoje_events').delete().eq('id', id);
+  if (error) return alert('Nie usunięto: ' + error.message);
+  dlg.close();
   loadBlocks();
 });
 

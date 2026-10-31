@@ -208,3 +208,50 @@ do $$ begin
   alter publication supabase_realtime add table pokoje_settings;
 exception when duplicate_object then null;
 end $$;
+
+-- ── Events calendar (imported from the Excel "harmonogram", then edited in the app) ──
+-- data keeps the spreadsheet's own column names as keys (see EVENT_COLS in index.html).
+create table if not exists pokoje_events (
+  id bigserial primary key,
+  day date not null,
+  kind text not null check (kind in ('impreza', 'komunia')),
+  data jsonb not null default '{}' check (jsonb_typeof(data) = 'object'),
+  sort int not null default 0,
+  source text,
+  updated_by text default lower(auth.jwt() ->> 'email'),
+  updated_at timestamptz not null default now()
+);
+create index if not exists pokoje_events_day on pokoje_events (day);
+alter table pokoje_events enable row level security;
+
+create or replace function pokoje_events_stamp() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  new.updated_at := now();
+  new.updated_by := lower(auth.jwt() ->> 'email');
+  return new;
+end $$;
+revoke execute on function pokoje_events_stamp() from public, anon, authenticated;
+drop trigger if exists pokoje_events_stamp on pokoje_events;
+create trigger pokoje_events_stamp before update on pokoje_events for each row execute function pokoje_events_stamp();
+
+drop policy if exists r on pokoje_events;
+drop policy if exists w on pokoje_events;
+create policy r on pokoje_events for select to authenticated using (pokoje_role() is not null);
+create policy w on pokoje_events for all to authenticated using (pokoje_role() = 'edit') with check (pokoje_role() = 'edit');
+revoke all on pokoje_events from anon, authenticated;
+grant select, insert, update, delete on pokoje_events to authenticated;
+revoke all on sequence pokoje_events_id_seq from anon;
+grant usage on sequence pokoje_events_id_seq to authenticated;
+
+-- Same live-refresh trick as pokoje_blocks.
+alter table pokoje_settings add column if not exists events_rev bigint not null default 0;
+create or replace function pokoje_events_bump() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  update pokoje_settings set events_rev = events_rev + 1 where id = 1;
+  return null;
+end $$;
+revoke execute on function pokoje_events_bump() from public, anon, authenticated;
+drop trigger if exists pokoje_events_bump on pokoje_events;
+create trigger pokoje_events_bump after insert or update or delete on pokoje_events for each statement execute function pokoje_events_bump();
