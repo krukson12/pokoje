@@ -255,3 +255,44 @@ end $$;
 revoke execute on function pokoje_events_bump() from public, anon, authenticated;
 drop trigger if exists pokoje_events_bump on pokoje_events;
 create trigger pokoje_events_bump after insert or update or delete on pokoje_events for each statement execute function pokoje_events_bump();
+
+-- ── Event attachments (oferta, kosztorys): PDF and DOCX in a private bucket ──
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values ('pokoje-files', 'pokoje-files', false, 20971520,
+  array['application/pdf', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'])
+on conflict (id) do update set public = false, file_size_limit = excluded.file_size_limit, allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists pokoje_files_r on storage.objects;
+drop policy if exists pokoje_files_i on storage.objects;
+drop policy if exists pokoje_files_d on storage.objects;
+create policy pokoje_files_r on storage.objects for select to authenticated
+  using (bucket_id = 'pokoje-files' and public.pokoje_role() is not null);
+create policy pokoje_files_i on storage.objects for insert to authenticated
+  with check (bucket_id = 'pokoje-files' and public.pokoje_role() = 'edit');
+create policy pokoje_files_d on storage.objects for delete to authenticated
+  using (bucket_id = 'pokoje-files' and public.pokoje_role() = 'edit');
+
+-- Storage keys can't hold Polish letters reliably, so the original file name lives here.
+create table if not exists pokoje_files (
+  id bigserial primary key,
+  event_id bigint not null references pokoje_events (id) on delete cascade,
+  name text not null,
+  path text not null unique,
+  size int,
+  by text default lower(auth.jwt() ->> 'email'),
+  at timestamptz not null default now()
+);
+create index if not exists pokoje_files_event on pokoje_files (event_id);
+alter table pokoje_files enable row level security;
+drop policy if exists r on pokoje_files;
+drop policy if exists i on pokoje_files;
+drop policy if exists d on pokoje_files;
+create policy r on pokoje_files for select to authenticated using (pokoje_role() is not null);
+create policy i on pokoje_files for insert to authenticated with check (pokoje_role() = 'edit' and by = lower(auth.jwt() ->> 'email'));
+create policy d on pokoje_files for delete to authenticated using (pokoje_role() = 'edit');
+revoke all on pokoje_files from anon, authenticated;
+grant select, insert, delete on pokoje_files to authenticated;
+revoke all on sequence pokoje_files_id_seq from anon;
+grant usage on sequence pokoje_files_id_seq to authenticated;
+drop trigger if exists pokoje_files_bump on pokoje_files;
+create trigger pokoje_files_bump after insert or delete on pokoje_files for each statement execute function pokoje_events_bump();
