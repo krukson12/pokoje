@@ -1,4 +1,4 @@
--- Pokoje: tablica stanu pokoi (dworek + hotel). Run: ~/terminy/sql.sh ~/pokoje/supabase.sql
+-- Pokoje: tablica stanu pokoi (dworek + hotel). Run: REF=wkzaebbfhytuauioqjqw ~/terminy/sql.sh ~/pokoje/supabase.sql (sql.sh defaults to the Duely project now)
 
 create table if not exists pokoje_staff (
   email text primary key check (email = lower(email)),
@@ -106,12 +106,12 @@ do $$ begin
 exception when duplicate_object then null;
 end $$;
 
--- Seed: 4 rooms in the manor (one for newlyweds), hotel rooms 1-28 without 11. Rename in the app.
+-- Seed: manor rooms 27-30 (30 for newlyweds), hotel rooms 1-28 without 11. Rename in the app.
 insert into pokoje_rooms (id, building, sort, name) values
-  ('d1', 'dworek', 1, 'Dworek 1'),
-  ('d2', 'dworek', 2, 'Dworek 2'),
-  ('d3', 'dworek', 3, 'Dworek 3'),
-  ('d4', 'dworek', 4, 'Dworek 4 (małżeński)')
+  ('d1', 'dworek', 1, 'Dworek 27'),
+  ('d2', 'dworek', 2, 'Dworek 28'),
+  ('d3', 'dworek', 3, 'Dworek 29'),
+  ('d4', 'dworek', 4, 'Dworek 30 (małżeński)')
 on conflict do nothing;
 insert into pokoje_rooms (id, building, sort, name)
   select 'h' || n, 'hotel', n, 'Hotel ' || n from generate_series(1, 28) n where n <> 11
