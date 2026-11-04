@@ -2,7 +2,8 @@
 
 Usage: python import_harmonogram.py file.xlsx 2026 out.sql   (needs openpyxl)
 Then:  REF=wkzaebbfhytuauioqjqw ~/terminy/sql.sh out.sql
-The output holds client data: keep it out of the repo. Re-running replaces that year's import.
+The output holds client data: keep it out of the repo. Re-running replaces that year's import,
+but refuses once anything from it was changed in the app.
 """
 import datetime
 import json
@@ -101,7 +102,16 @@ def main(path, year, out_path):
     co, c2 = communions(wb[f'Komunie {year}'], year)
     rows = ev + co
     source = f'excel-{year}'
-    sql = [f"delete from pokoje_events where source = '{source}';"]
+    # Re-importing deletes that year's rows (and with them their attachments), so refuse when
+    # anything from the import was edited, deleted or given files in the app since.
+    guard = f"""do $$ begin
+  if exists (select 1 from pokoje_events e where e.source = '{source}'
+             and (e.updated_by is distinct from 'import excel' or exists (select 1 from pokoje_files f where f.event_id = e.id)))
+     or exists (select 1 from pokoje_log l where l.tbl = 'pokoje_events' and l.old ->> 'source' = '{source}' and l.new = '{{}}')
+  then raise exception 'Import przerwany: imprezy z tego importu były zmieniane, usuwane albo mają pliki w aplikacji.';
+  end if;
+end $$;"""
+    sql = [guard, f"delete from pokoje_events where source = '{source}';"]
     for kind, day, data, sort in rows:
         sql.append("insert into pokoje_events (day, kind, data, sort, source, updated_by) values "
                    f"('{day}', '{kind}', $j${json.dumps(data, ensure_ascii=False)}$j$::jsonb, {sort}, '{source}', 'import excel');")

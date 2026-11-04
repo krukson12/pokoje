@@ -8,9 +8,13 @@ create table if not exists pokoje_staff (
 -- Owner rows can't be changed or removed from the app.
 alter table pokoje_staff add column if not exists locked boolean not null default false;
 
+-- The session check makes a password reset (which ends sessions) cut access at once;
+-- without it the person's old token kept working until it expired (up to an hour).
 create or replace function pokoje_role() returns text
 language sql stable security definer set search_path = public as $$
-  select role from pokoje_staff where email = lower(auth.jwt() ->> 'email')
+  select role from pokoje_staff
+  where email = lower(auth.jwt() ->> 'email')
+    and exists (select 1 from auth.sessions where id::text = auth.jwt() ->> 'session_id')
 $$;
 grant execute on function pokoje_role() to authenticated;
 
@@ -40,14 +44,14 @@ create table if not exists pokoje_rooms (
   occupied boolean not null default false,
   guest text not null default '',
   extra_beds int not null default 0 check (extra_beds between 0 and 3),
-  cleaned boolean not null default false,
-  prepared boolean not null default false,
-  keys_out boolean not null default false,
-  keys_back boolean not null default false,
   note text not null default '',
   updated_at timestamptz not null default now(),
   updated_by text
 );
+
+-- Left over from the removed cleaning/keys checklist.
+alter table pokoje_rooms drop column if exists cleaned, drop column if exists prepared,
+  drop column if exists keys_out, drop column if exists keys_back;
 
 create table if not exists pokoje_settings (
   id int primary key default 1 check (id = 1),
@@ -62,6 +66,9 @@ create table if not exists pokoje_log (
   old jsonb not null,
   new jsonb not null
 );
+-- tbl = which table changed; room_id is set for rooms and blocks.
+alter table pokoje_log add column if not exists tbl text not null default 'pokoje_rooms';
+alter table pokoje_log alter column room_id drop not null;
 create index if not exists pokoje_log_room on pokoje_log (room_id, at desc);
 create index if not exists pokoje_log_at on pokoje_log (at desc);
 
@@ -204,22 +211,6 @@ end $$;
 revoke execute on function pokoje_block_hotel(date, date, int, text) from public, anon;
 grant execute on function pokoje_block_hotel(date, date, int, text) to authenticated;
 
--- Live updates go through a counter on pokoje_settings: realtime DELETE events skip RLS
--- and would show outsiders which room was unblocked, UPDATE events don't.
-alter table pokoje_settings add column if not exists blocks_rev bigint not null default 0;
-create or replace function pokoje_blocks_bump() returns trigger
-language plpgsql security definer set search_path = public as $$
-begin
-  update pokoje_settings set blocks_rev = blocks_rev + 1 where id = 1;
-  return null;
-end $$;
-revoke execute on function pokoje_blocks_bump() from public, anon, authenticated;
-drop trigger if exists pokoje_blocks_bump on pokoje_blocks;
-create trigger pokoje_blocks_bump after insert or delete on pokoje_blocks for each statement execute function pokoje_blocks_bump();
-do $$ begin
-  alter publication supabase_realtime add table pokoje_settings;
-exception when duplicate_object then null;
-end $$;
 
 -- ── Events calendar (imported from the Excel "harmonogram", then edited in the app) ──
 -- data keeps the spreadsheet's own column names as keys (see EVENT_COLS in index.html).
@@ -256,17 +247,6 @@ grant select, insert, update, delete on pokoje_events to authenticated;
 revoke all on sequence pokoje_events_id_seq from anon;
 grant usage on sequence pokoje_events_id_seq to authenticated;
 
--- Same live-refresh trick as pokoje_blocks.
-alter table pokoje_settings add column if not exists events_rev bigint not null default 0;
-create or replace function pokoje_events_bump() returns trigger
-language plpgsql security definer set search_path = public as $$
-begin
-  update pokoje_settings set events_rev = events_rev + 1 where id = 1;
-  return null;
-end $$;
-revoke execute on function pokoje_events_bump() from public, anon, authenticated;
-drop trigger if exists pokoje_events_bump on pokoje_events;
-create trigger pokoje_events_bump after insert or update or delete on pokoje_events for each statement execute function pokoje_events_bump();
 
 -- ── Event attachments (oferta, kosztorys, zdjęcia): PDF, DOCX, JPG, HEIC in a private bucket ──
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
@@ -306,8 +286,6 @@ revoke all on pokoje_files from anon, authenticated;
 grant select, insert, delete on pokoje_files to authenticated;
 revoke all on sequence pokoje_files_id_seq from anon;
 grant usage on sequence pokoje_files_id_seq to authenticated;
-drop trigger if exists pokoje_files_bump on pokoje_files;
-create trigger pokoje_files_bump after insert or delete on pokoje_files for each statement execute function pokoje_events_bump();
 
 -- Block details like the room sheet on "Dziś": guest (note), extra beds, notes.
 alter table pokoje_blocks add column if not exists extra_beds int not null default 0 check (extra_beds between 0 and 3);
@@ -316,5 +294,54 @@ drop policy if exists u on pokoje_blocks;
 create policy u on pokoje_blocks for update to authenticated
   using (pokoje_can_edit() and day >= pokoje_today()) with check (pokoje_can_edit() and day >= pokoje_today());
 grant update (note, extra_beds, details) on pokoje_blocks to authenticated;
+
+-- ── Live refresh ──
+-- Blocks, events and files aren't broadcast themselves: realtime DELETE events skip RLS and
+-- would show outsiders what was removed. A counter on pokoje_settings (UPDATE events do
+-- respect RLS) tells the app to reload.
+alter table pokoje_settings add column if not exists rev bigint not null default 0;
+create or replace function pokoje_bump() returns trigger
+language plpgsql security definer set search_path = public as $$
+begin
+  update pokoje_settings set rev = rev + 1 where id = 1;
+  return null;
+end $$;
+revoke execute on function pokoje_bump() from public, anon, authenticated;
 drop trigger if exists pokoje_blocks_bump on pokoje_blocks;
-create trigger pokoje_blocks_bump after insert or update or delete on pokoje_blocks for each statement execute function pokoje_blocks_bump();
+drop trigger if exists pokoje_events_bump on pokoje_events;
+drop trigger if exists pokoje_files_bump on pokoje_files;
+drop trigger if exists pokoje_bump on pokoje_blocks;
+drop trigger if exists pokoje_bump on pokoje_events;
+drop trigger if exists pokoje_bump on pokoje_files;
+create trigger pokoje_bump after insert or update or delete on pokoje_blocks for each statement execute function pokoje_bump();
+create trigger pokoje_bump after insert or update or delete on pokoje_events for each statement execute function pokoje_bump();
+create trigger pokoje_bump after insert or delete on pokoje_files for each statement execute function pokoje_bump();
+drop function if exists pokoje_blocks_bump();
+drop function if exists pokoje_events_bump();
+alter table pokoje_settings drop column if exists blocks_rev, drop column if exists events_rev;
+do $$ begin
+  alter publication supabase_realtime add table pokoje_settings;
+exception when duplicate_object then null;
+end $$;
+
+-- ── History for everything else (rooms log themselves in pokoje_rooms_stamp) ──
+create or replace function pokoje_log_change() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare
+  o jsonb := case when tg_op <> 'INSERT' then to_jsonb(old) end;
+  n jsonb := case when tg_op <> 'DELETE' then to_jsonb(new) end;
+begin
+  if o is not distinct from n then return null; end if;
+  insert into pokoje_log (tbl, room_id, by, old, new)
+  values (tg_table_name, coalesce(n, o) ->> 'room_id', lower(auth.jwt() ->> 'email'), coalesce(o, '{}'), coalesce(n, '{}'));
+  return null;
+end $$;
+revoke execute on function pokoje_log_change() from public, anon, authenticated;
+drop trigger if exists pokoje_log_change on pokoje_blocks;
+drop trigger if exists pokoje_log_change on pokoje_events;
+drop trigger if exists pokoje_log_change on pokoje_files;
+drop trigger if exists pokoje_log_change on pokoje_staff;
+create trigger pokoje_log_change after insert or update or delete on pokoje_blocks for each row execute function pokoje_log_change();
+create trigger pokoje_log_change after insert or update or delete on pokoje_events for each row execute function pokoje_log_change();
+create trigger pokoje_log_change after insert or delete on pokoje_files for each row execute function pokoje_log_change();
+create trigger pokoje_log_change after insert or update or delete on pokoje_staff for each row execute function pokoje_log_change();

@@ -1,3 +1,4 @@
 .DS_Store
 supabase/.temp/
 __pycache__/
+node_modules/

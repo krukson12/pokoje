@@ -19,7 +19,7 @@
   header h1 { font-size:18px; margin:0; flex:1; }
   header button { background:#374151; color:#fff; border:0; border-radius:8px; padding:6px 10px; font-size:14px; }
   .wrap { max-width:960px; margin:0 auto; padding:12px 16px 40px; }
-  #stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-bottom:12px; }
+  #stats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:12px; }
   .stat { background:var(--card); border-radius:10px; padding:8px; text-align:center; }
   .stat b { display:block; font-size:22px; }
   .stat small { color:var(--mute); font-size:12px; }
@@ -121,6 +121,7 @@
       <nav id="filters">
         <button data-f="all" class="on">Wszystkie</button>
         <button data-f="free">Wolne</button>
+        <button data-f="blk">Zablokowane</button>
         <button data-f="occ">Zajęte</button>
       </nav>
       <div id="board"></div>
@@ -196,8 +197,9 @@ const LOCAL = '@pokoje.local';
 const isLocal = email => email.endsWith(LOCAL);
 const shortEmail = email => isLocal(email) ? 'login: ' + email.slice(0, -LOCAL.length) : email;
 const who = email => staff.find(s => s.email === email)?.name || (email ? shortEmail(email) : '?');
-const state = r => r.occupied ? 'occ' : 'free';
-const STATE_TXT = { free: 'Wolny', occ: 'Zajęty' };
+// A room blocked in the calendar for today is not free to sell, even if nobody took it yet.
+const state = r => r.occupied ? 'occ' : blockOf(r.id, todayISO()) ? 'blk' : 'free';
+const STATE_TXT = { free: 'Wolny', blk: 'Zablokowany', occ: 'Zajęty' };
 
 // ── Auth ──
 async function start() {
@@ -306,7 +308,7 @@ function render() {
   const n = s => rooms.filter(r => state(r) === s).length;
   const beds = rooms.reduce((a, r) => a + r.extra_beds, 0);
   $('#stats').innerHTML = [
-    [n('free'), 'wolne'], [n('occ'), 'zajęte'],
+    [n('free'), 'wolne'], [n('blk'), 'zablokowane'], [n('occ'), 'zajęte'],
     [`${beds} / ${settings.extra_beds_total ?? '?'}`, 'dostawki w użyciu'],
   ].map(([v, l]) => `<div class="stat"><b>${v}</b><small>${l}</small></div>`).join('');
 
@@ -326,9 +328,10 @@ function render() {
 
 function tile(r) {
   const s = state(r);
-  const ic = [r.extra_beds ? `🛏+${r.extra_beds}` : '', r.note ? '📝' : '', blockOf(r.id, todayISO()) ? '📅' : ''].join(' ');
-  return `<button class="tile ${s}" data-id="${r.id}"><b>${esc(r.name)}</b>
-    <small>${r.occupied ? esc(r.guest) || 'Zajęty' : STATE_TXT[s]}</small><span class="ic">${ic}</span></button>`;
+  const k = blockOf(r.id, todayISO());
+  const ic = [r.extra_beds ? `🛏+${r.extra_beds}` : '', r.note ? '📝' : '', k && r.occupied ? '📅' : ''].join(' ');
+  const text = r.occupied ? esc(r.guest) || 'Zajęty' : k ? esc(k.note) || 'Zablokowany' : 'Wolny';
+  return `<button class="tile ${s}" data-id="${r.id}"><b>${esc(r.name)}</b><small>${text}</small><span class="ic">${ic}</span></button>`;
 }
 
 $('#board').onclick = e => { const t = e.target.closest('.tile'); if (t) { openBlk = null; openId = t.dataset.id; roomSheet(openId); dlg.showModal(); } };
@@ -406,6 +409,14 @@ $('#dayRooms').onclick = e => {
   dlg.showModal();
 };
 
+// Guest, extra beds and notes: the same fields on the room sheet ("Dziś") and the block sheet
+// (calendar). Each arg is [attribute, value]; beds may add a third, extra attribute.
+const guestFields = (dis, [gAttr, guest], [bAttr, beds, bExtra = ''], [nAttr, notes]) => `
+    <div class="row"><label class="f">Gość / wesele</label><input type="text" ${gAttr} value="${esc(guest)}" ${dis} placeholder="np. wesele Kowalskich, p. Nowak"></div>
+    <div class="row"><label class="f">Łóżka dostawkowe</label><div class="stepper">
+      <button ${bAttr}="-1" ${dis} aria-label="Mniej">−</button><b ${bExtra}>${beds}</b><button ${bAttr}="1" ${dis} aria-label="Więcej">+</button></div></div>
+    <div class="row"><label class="f">Notatka</label><textarea ${nAttr} ${dis} placeholder="np. łóżeczko dla dziecka, późny przyjazd">${esc(notes)}</textarea></div>`;
+
 // Same fields as the room sheet on "Dziś", for the day picked in the calendar.
 // Not blocked yet: the fields are a draft saved by "Zablokuj". Blocked: each change saves.
 function blockSheet(id) {
@@ -415,11 +426,9 @@ function blockSheet(id) {
   $('#dlgBody').innerHTML = `
     <h3>${esc(r.name)} <span class="badge ${k ? 'blk' : 'free'}">${k ? 'Zablokowany' : 'Wolny'}</span><button class="x" aria-label="Zamknij">×</button></h3>
     <div class="meta">${plDay(day)}${k && isAdmin() ? ` · zablokował(a): ${esc(who(k.by))}, ${when(k.at)}` : ''}</div>
+    ${day === todayISO() && r.occupied ? `<p class="msg">Pokój jest teraz zajęty${r.guest ? ': ' + esc(r.guest) : ''}.</p>` : ''}
     ${ed ? `<div class="row">${k ? '<button class="big free" data-bact="free">Odblokuj pokój</button>' : '<button class="big blk" data-bact="block">Zablokuj pokój</button>'}</div>` : ''}
-    <div class="row"><label class="f">Gość / wesele</label><input type="text" data-b="note" value="${esc(v.note)}" ${dis} placeholder="np. wesele Kowalskich, p. Nowak"></div>
-    <div class="row"><label class="f">Łóżka dostawkowe</label><div class="stepper">
-      <button data-bbeds="-1" ${dis} aria-label="Mniej">−</button><b id="bBeds">${v.extra_beds}</b><button data-bbeds="1" ${dis} aria-label="Więcej">+</button></div></div>
-    <div class="row"><label class="f">Notatka</label><textarea data-b="details" ${dis} placeholder="np. łóżeczko dla dziecka, późny przyjazd">${esc(v.details)}</textarea></div>`;
+    ${guestFields(dis, ['data-b="note"', v.note], ['data-bbeds', v.extra_beds, 'id="bBeds"'], ['data-b="details"', v.details])}`;
 }
 
 async function saveBlock(id, patch) {
@@ -437,6 +446,8 @@ $('#dlgBody').addEventListener('click', async e => {
     $('#bBeds').textContent = v;
   }
   if (act === 'block') {
+    const r = rooms.find(x => x.id === id);
+    if (day === todayISO() && r.occupied && !confirm(`${r.name} jest teraz zajęty. Zablokować mimo to?`)) return;
     const { error } = await sb.from('pokoje_blocks').insert({ room_id: id, day,
       note: $('[data-b=note]').value.trim(), details: $('[data-b=details]').value.trim(), extra_beds: +$('#bBeds').textContent });
     if (error) alert(error.code === '23505' ? 'Ktoś przed chwilą zablokował ten pokój.' : 'Nie zapisano: ' + error.message);
@@ -543,9 +554,10 @@ $('#dlgBody').addEventListener('click', async e => {
   const id = +$('#evForm').dataset.id;
   const own = files.filter(f => f.event_id === id);
   if (!confirm('Usunąć tę imprezę' + (own.length ? ` i ${own.length} załączonych plików` : '') + '? Tego nie da się cofnąć.')) return;
-  if (own.length) await sb.storage.from('pokoje-files').remove(own.map(f => f.path));
+  // Row first (its file rows go with it); if the storage step fails only an unseen object is left.
   const { error } = await sb.from('pokoje_events').delete().eq('id', id);
   if (error) return alert('Nie usunięto: ' + error.message);
+  if (own.length) await sb.storage.from('pokoje-files').remove(own.map(f => f.path));
   dlg.close();
   loadBlocks();
 });
@@ -563,9 +575,9 @@ $('#evList').addEventListener('click', async e => {
   if (del) {
     const f = files.find(x => x.id === +del.dataset.delfile);
     if (!confirm(`Usunąć plik ${f.name}?`)) return;
-    const { error } = await sb.storage.from('pokoje-files').remove([f.path]);
+    const { error } = await sb.from('pokoje_files').delete().eq('id', f.id);
     if (error) return alert('Nie usunięto pliku: ' + error.message);
-    await sb.from('pokoje_files').delete().eq('id', f.id);
+    await sb.storage.from('pokoje-files').remove([f.path]);
     loadBlocks();
   }
 });
@@ -600,10 +612,7 @@ async function roomSheet(id) {
     ${canEdit() ? `<div class="row">${r.occupied
       ? '<button class="big free" data-act="free">Zwolnij pokój</button>'
       : '<button class="big take" data-act="take">Zajmij pokój</button>'}</div>` : ''}
-    <div class="row"><label class="f">Gość / wesele</label><input type="text" data-f="guest" value="${esc(r.guest)}" ${dis} placeholder="np. wesele Kowalskich, p. Nowak"></div>
-    <div class="row"><label class="f">Łóżka dostawkowe</label><div class="stepper">
-      <button data-beds="-1" ${dis} aria-label="Mniej">−</button><b>${r.extra_beds}</b><button data-beds="1" ${dis} aria-label="Więcej">+</button></div></div>
-    <div class="row"><label class="f">Notatka</label><textarea data-f="note" ${dis} placeholder="np. zepsuta lampka, łóżeczko dla dziecka">${esc(r.note)}</textarea></div>
+    ${guestFields(dis, ['data-f="guest"', r.guest], ['data-beds', r.extra_beds], ['data-f="note"', r.note])}
     ${canEdit() ? `<div class="row"><label class="f">Nazwa pokoju</label><input type="text" data-f="name" value="${esc(r.name)}"></div>` : ''}
     ${isAdmin() ? '<div class="row"><label class="f">Historia pokoju</label><ul class="log" id="roomLog"><li class="meta">Wczytuję…</li></ul></div>' : ''}`;
   if (!isAdmin()) return;
@@ -615,7 +624,9 @@ async function roomSheet(id) {
 $('#dlgBody').addEventListener('click', e => {
   const r = rooms.find(x => x.id === openId); if (!r) return;
   const act = e.target.dataset.act, beds = e.target.dataset.beds;
-  if (act === 'take') save(r.id, { occupied: true }, true);
+  const k = blockOf(r.id, todayISO());
+  if (act === 'take' && (!k || confirm(`${r.name} jest zablokowany na dziś${k.note ? ' (' + k.note + ')' : ''}. Zająć mimo to?`)))
+    save(r.id, { occupied: true }, true);
   if (act === 'free') save(r.id, { occupied: false, guest: '', extra_beds: 0 });
   if (beds) {
     const v = r.extra_beds + +beds;
@@ -636,8 +647,18 @@ const FIELDS = {
   name: v => `nazwa: ${v}`,
 };
 const diff = l => Object.keys(FIELDS).filter(k => l.old[k] !== l.new[k]).map(k => esc(FIELDS[k](l.new[k]))).join(', ');
+// Rows from pokoje_log_change(): old = {} on insert, new = {} on delete.
+function describe(l) {
+  const add = !Object.keys(l.old).length, del = !Object.keys(l.new).length, x = del ? l.old : l.new;
+  const room = id => rooms.find(r => r.id === id)?.name || id;
+  if (l.tbl === 'pokoje_blocks') return `${room(x.room_id)}, ${shortDay(x.day)}: ${add ? 'zablokowany' : del ? 'odblokowany' : 'zmiana blokady'}${x.note && !del ? ' (' + x.note + ')' : ''}`;
+  if (l.tbl === 'pokoje_events') return `${add ? 'Nowa' : del ? 'Usunięta' : 'Zmieniona'} impreza ${shortDay(x.day)}: ${evTitle(x)}`;
+  if (l.tbl === 'pokoje_files') return `${del ? 'Usunięty' : 'Dodany'} plik: ${x.name}`;
+  if (l.tbl === 'pokoje_staff') return `Zespół: ${add ? 'dodano' : del ? 'usunięto' : 'zmiana'} ${x.name || shortEmail(x.email)}${del ? '' : ' (' + ROLE_TXT[x.role] + ')'}`;
+  return l.tbl;
+}
 const logItems = (rows, withRoom) => rows?.length
-  ? rows.map(l => `<li>${withRoom ? `<b>${esc(l.new.name)}</b>: ` : ''}${diff(l)}<br><small>${esc(who(l.by))}, ${when(l.at)}</small></li>`).join('')
+  ? rows.map(l => `<li>${l.tbl === 'pokoje_rooms' ? (withRoom ? `<b>${esc(l.new.name)}</b>: ` : '') + diff(l) : esc(describe(l))}<br><small>${esc(who(l.by))}, ${when(l.at)}</small></li>`).join('')
   : '<li class="meta">Brak zmian.</li>';
 
 $('#histBtn').onclick = async () => {
