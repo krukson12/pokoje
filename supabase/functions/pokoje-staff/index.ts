@@ -1,4 +1,4 @@
-// Login + password accounts for staff without Google. Only editors may call it, and only
+// Login + password accounts for staff without Google. Only editors and admins may call it, and only
 // for <login>@pokoje.local accounts, so nobody can touch other users of this shared project.
 // Takes { action: 'create' | 'password' | 'delete', login, password?, name?, role? }.
 const DOMAIN = '@pokoje.local';
@@ -28,7 +28,8 @@ Deno.serve(async req => {
     headers: { apikey: Deno.env.get('SUPABASE_ANON_KEY')!, Authorization: req.headers.get('Authorization') ?? '', 'Content-Type': 'application/json' },
     body: '{}',
   });
-  if (!r.ok || (await r.json()) !== 'edit') return reply({ error: 'Tylko osoba z edycją może zarządzać kontami.' }, 403);
+  const callerRole = r.ok ? await r.json() : null;
+  if (callerRole !== 'edit' && callerRole !== 'admin') return reply({ error: 'Tylko osoba z edycją może zarządzać kontami.' }, 403);
 
   let b: Record<string, unknown>;
   try { b = await req.json(); } catch { return reply({ error: 'Zły format zapytania.' }, 400); }
@@ -40,7 +41,7 @@ Deno.serve(async req => {
 
   if (b.action === 'create') {
     if (badPassword) return reply({ error: 'Hasło musi mieć od 8 do 72 znaków.' }, 400);
-    if (b.role !== 'edit' && b.role !== 'view') return reply({ error: 'Zła rola.' }, 400);
+    if (b.role !== 'edit' && b.role !== 'view' && !(b.role === 'admin' && callerRole === 'admin')) return reply({ error: 'Zła rola.' }, 400);
     const u = await admin('/auth/v1/admin/users', 'POST', { email, password, email_confirm: true });
     if (!u.ok) {
       const e = await u.json().catch(() => ({}));
@@ -51,10 +52,11 @@ Deno.serve(async req => {
     return reply({ ok: true });
   }
 
-  // Same rule as the RLS policies: nobody changes themselves or a locked (owner) row.
+  // Same rule as the RLS policies: nobody changes themselves or a locked (owner) row; only admins touch admins.
   const caller = JSON.parse(atob((req.headers.get('Authorization') ?? '').split('.')[1].replace(/-/g, '+').replace(/_/g, '/'))).email;
-  const row = await (await admin(`/rest/v1/pokoje_staff?select=locked&email=eq.${encodeURIComponent(email)}`)).json();
-  if (email === String(caller).toLowerCase() || row[0]?.locked) return reply({ error: 'Tego konta nie można zmienić.' }, 403);
+  const row = await (await admin(`/rest/v1/pokoje_staff?select=locked,role&email=eq.${encodeURIComponent(email)}`)).json();
+  if (email === String(caller).toLowerCase() || row[0]?.locked || (row[0]?.role === 'admin' && callerRole !== 'admin'))
+    return reply({ error: 'Tego konta nie można zmienić.' }, 403);
 
   const idRes = await admin('/rest/v1/rpc/pokoje_user_id', 'POST', { p_email: email });
   const id = idRes.ok ? await idRes.json() : null;

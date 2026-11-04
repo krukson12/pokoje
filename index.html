@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Pokoje</title>
+<title>Dworek</title>
 <meta name="theme-color" content="#1f2937">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
@@ -71,13 +71,13 @@
   .sheet h3 { margin:0 0 4px; font-size:20px; display:flex; align-items:center; gap:8px; }
   .sheet h3 .x { margin-left:auto; border:0; background:none; font-size:24px; line-height:1; padding:0 4px; }
   .badge { font-size:12px; padding:2px 8px; border-radius:99px; color:#fff; }
-  .badge.free { background:var(--free); } .badge.occ { background:var(--occ); }
+  .badge.free { background:var(--free); } .badge.occ { background:var(--occ); } .badge.blk { background:var(--blk); }
   .row { margin:12px 0; }
   label.f { display:block; font-size:13px; color:var(--mute); margin-bottom:4px; }
   input[type=text], input[type=email], input[type=password], input[type=number], input[type=date], textarea, select { width:100%; font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
   textarea { min-height:60px; resize:vertical; }
   .big { width:100%; border:0; border-radius:10px; padding:12px; font-weight:600; color:#fff; font-size:17px; }
-  .big.take { background:var(--occ); } .big.free { background:var(--free); }
+  .big.take { background:var(--occ); } .big.free { background:var(--free); } .big.blk { background:var(--blk); }
   .stepper { display:flex; align-items:center; gap:12px; }
   .stepper button { width:40px; height:40px; border-radius:8px; border:1px solid var(--line); background:#fff; font-size:20px; }
   .stepper b { font-size:20px; min-width:20px; text-align:center; }
@@ -95,7 +95,7 @@
 <body>
 
 <div id="login" hidden>
-  <h1>Pokoje</h1>
+  <h1>Dworek</h1>
   <p class="meta" id="loginMsg">Zaloguj się, żeby zobaczyć stan pokoi.</p>
   <form id="pwForm" class="row">
     <input type="text" id="user" placeholder="login" autocomplete="username" autocapitalize="none" required>
@@ -108,7 +108,7 @@
 
 <div id="app" hidden>
   <header>
-    <h1>Pokoje</h1>
+    <h1>Dworek</h1>
     <button id="histBtn">Historia</button>
     <button id="teamBtn">Zespół</button>
     <button id="logout">Wyloguj</button>
@@ -164,7 +164,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const when = t => new Date(t).toLocaleString('pl-PL', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit' });
 const dlg = $('#dlg');
 
-let role = null, me = '', rooms = [], staff = [], settings = {}, filter = 'all', openId = null;
+let role = null, me = '', rooms = [], staff = [], settings = {}, filter = 'all', openId = null, openBlk = null;
 // Calendar: days are local YYYY-MM-DD strings; the venue and its staff are in Poland.
 const iso = d => d.toLocaleDateString('sv-SE');
 const todayISO = () => iso(new Date());
@@ -185,7 +185,12 @@ const FILE_TYPES = {
   jpg: 'image/jpeg', jpeg: 'image/jpeg', heic: 'image/heic',
 };
 const eventsOn = d => events.filter(e => e.day === d);
-const canEdit = () => role === 'edit';
+const canEdit = () => role === 'edit' || role === 'admin';
+const isAdmin = () => role === 'admin';
+const ROLE_TXT = { admin: 'admin', edit: 'edycja', view: 'podgląd' };
+// Admins can hand out admin; others only edit/view.
+const roleOptions = sel => Object.entries(ROLE_TXT).filter(([k]) => k !== 'admin' || isAdmin())
+  .map(([k, l]) => `<option value="${k}" ${k === sel ? 'selected' : ''}>${l}</option>`).join('');
 // Login accounts live in auth as <login>@pokoje.local (see supabase/functions/pokoje-staff).
 const LOCAL = '@pokoje.local';
 const isLocal = email => email.endsWith(LOCAL);
@@ -204,7 +209,10 @@ async function start() {
   if (!role) return showLogin(`Konto ${me} nie ma dostępu. Poproś kierownika o dodanie tego adresu w zakładce Zespół.`, true);
   $('#login').hidden = true;
   $('#app').hidden = false;
-  $("#who").textContent = `Zalogowano: ${shortEmail(me)} (${canEdit() ? 'edycja' : 'tylko podgląd'})`;
+  $("#who").textContent = `Zalogowano: ${shortEmail(me)} (${canEdit() ? ROLE_TXT[role] : 'tylko podgląd'})`;
+  // History is for admins, the team list for anyone who can edit.
+  $('#histBtn').hidden = !isAdmin();
+  $('#teamBtn').hidden = !canEdit();
   await load();
   sb.channel('pokoje')
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'pokoje_rooms' }, p => put(p.new))
@@ -231,7 +239,13 @@ $('#pwForm').onsubmit = async e => {
   const { error } = await sb.auth.signInWithPassword({ email: $("#user").value.trim().toLowerCase().replace(LOCAL, '') + LOCAL, password: $('#pw').value });
   if (error) $('#loginMsg').textContent = /invalid/i.test(error.message) ? 'Zły login albo hasło.' : 'Nie zalogowano: ' + error.message;
 };
-$('#logout').onclick = $('#logout2').onclick = async () => { await sb.auth.signOut(); location.reload(); };
+// Local sign-out: a global one fails on an already-ended session (e.g. after a password reset)
+// and then left the phone signed in.
+$('#logout').onclick = $('#logout2').onclick = async () => {
+  await Promise.race([sb.auth.signOut({ scope: 'local' }).catch(() => {}), new Promise(r => setTimeout(r, 2000))]);
+  Object.keys(localStorage).filter(k => k.startsWith('sb-')).forEach(k => localStorage.removeItem(k));
+  location.reload();
+};
 sb.auth.onAuthStateChange(ev => { if (ev === 'SIGNED_IN' && !role) start(); });
 
 // ── Data ──
@@ -254,16 +268,20 @@ function gridDays() {
 
 // Blocks for the visible weeks plus today (the board shows today's blocks).
 // Events too, for the same range.
+let loadSeq = 0;
 async function loadBlocks() {
+  // Paging months quickly fires several loads; only the latest one may land.
+  const seq = ++loadSeq;
   const g = gridDays(), t = todayISO(), from = g[0] < t ? g[0] : t, to = g[41] > t ? g[41] : t;
   const [b, ev] = await Promise.all([
     sb.from('pokoje_blocks').select('*').gte('day', from).lte('day', to),
     sb.from('pokoje_events').select('*').gte('day', from).lte('day', to).order('day').order('kind').order('sort').order('id'),
   ]);
+  if (seq !== loadSeq) return;
   if (b.error || ev.error) return alert('Nie wczytano kalendarza: ' + (b.error || ev.error).message);
-  blocks = b.data; events = ev.data;
-  const f = events.length ? await sb.from('pokoje_files').select('*').in('event_id', events.map(e => e.id)).order('at') : { data: [] };
-  files = f.data || [];
+  const f = ev.data.length ? await sb.from('pokoje_files').select('*').in('event_id', ev.data.map(e => e.id)).order('at') : { data: [] };
+  if (seq !== loadSeq) return;
+  blocks = b.data; events = ev.data; files = f.data || [];
   render();
 }
 
@@ -301,6 +319,8 @@ function render() {
   $('#todayEv').textContent = te.length ? 'Dziś: ' + te.map(evTitle).join(', ') : '';
   if (view === 'cal') renderCal();
   if (view === 'ev') renderEv();
+  // A draft (room not blocked yet) lives only in the sheet; redraw only saved blocks.
+  if (openBlk && dlg.open && blockOf(openBlk, day)) blockSheet(openBlk);
   if (openId && dlg.open) roomSheet(openId);
 }
 
@@ -311,14 +331,15 @@ function tile(r) {
     <small>${r.occupied ? esc(r.guest) || 'Zajęty' : STATE_TXT[s]}</small><span class="ic">${ic}</span></button>`;
 }
 
-$('#board').onclick = e => { const t = e.target.closest('.tile'); if (t) { openId = t.dataset.id; roomSheet(openId); dlg.showModal(); } };
+$('#board').onclick = e => { const t = e.target.closest('.tile'); if (t) { openBlk = null; openId = t.dataset.id; roomSheet(openId); dlg.showModal(); } };
 $('#filters').onclick = e => {
   const b = e.target.closest('button'); if (!b) return;
   filter = b.dataset.f;
   $('#filters').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
   render();
 };
-dlg.onclose = () => { openId = null; };
+// 'close' fires late: if another sheet was opened meanwhile, keep its state.
+dlg.onclose = () => { if (!dlg.open) openId = openBlk = null; };
 dlg.onclick = e => { if (e.target === dlg || e.target.closest('.x')) dlg.close(); };
 
 // ── Calendar ──
@@ -330,12 +351,13 @@ function renderCal() {
   const ed = canEdit() && day >= t;
   $('#dayName').textContent = plDay(day);
   $('#dayInfo').textContent = `Zablokowane: ${counts[day] || 0} z ${rooms.length}. ` +
-    (ed ? 'Dotknij pokoju, żeby go zablokować albo odblokować.' : day < t ? 'Ten dzień minął.' : '');
+    (ed ? 'Dotknij pokoju, żeby go zablokować, odblokować albo dopisać gościa.' : day < t ? 'Ten dzień minął, tylko podgląd.' : '');
   $('#calTools').hidden = !ed;
   $('#dayRooms').innerHTML = BUILDINGS.map(([b, label]) => `<h2>${label}</h2><div class="grid">${rooms.filter(r => r.building === b).map(r => {
     const k = blockOf(r.id, day);
-    return `<button class="tile ${k ? 'blk' : 'free'}" data-blk="${r.id}" ${ed ? '' : 'disabled'}><b>${esc(r.name)}</b>
-      <small>${k ? esc(k.note) || 'Zablokowany' : 'Wolny'}</small>${k ? `<span class="ic meta">${esc(who(k.by))}</span>` : ''}</button>`;
+    const ic = k ? [k.extra_beds ? `🛏+${k.extra_beds}` : '', k.details ? '📝' : '', isAdmin() ? esc(who(k.by)) : ''].join(' ') : '';
+    return `<button class="tile ${k ? 'blk' : 'free'}" data-blk="${r.id}"><b>${esc(r.name)}</b>
+      <small>${k ? esc(k.note) || 'Zablokowany' : 'Wolny'}</small><span class="ic meta">${ic}</span></button>`;
   }).join('')}</div>`).join('');
 }
 
@@ -377,18 +399,63 @@ $('#calGrid').onclick = $('#evGrid').onclick = e => {
 };
 $('#evPrev').onclick = () => shiftMonth(-1);
 $('#evNext').onclick = () => shiftMonth(1);
-$('#dayRooms').onclick = async e => {
-  const b = e.target.closest('[data-blk]'); if (!b || b.disabled) return;
-  const k = blockOf(b.dataset.blk, day);
-  const { error } = k
-    ? await sb.from('pokoje_blocks').delete().eq('room_id', k.room_id).eq('day', day)
-    : await sb.from('pokoje_blocks').insert({ room_id: b.dataset.blk, day, note: $('#blkNote').value.trim() });
-  if (error) alert(error.code === '23505' ? 'Ktoś przed chwilą zablokował ten pokój.' : 'Nie zapisano: ' + error.message);
-  loadBlocks();
+$('#dayRooms').onclick = e => {
+  const b = e.target.closest('[data-blk]'); if (!b) return;
+  openId = null; openBlk = b.dataset.blk;
+  blockSheet(openBlk);
+  dlg.showModal();
 };
 
+// Same fields as the room sheet on "Dziś", for the day picked in the calendar.
+// Not blocked yet: the fields are a draft saved by "Zablokuj". Blocked: each change saves.
+function blockSheet(id) {
+  if (dlg.contains(document.activeElement) && document.activeElement.matches('input[type=text],textarea')) return;
+  const r = rooms.find(x => x.id === id), k = blockOf(id, day), ed = canEdit() && day >= todayISO(), dis = ed ? '' : 'disabled';
+  const v = k || { note: $('#blkNote').value.trim(), extra_beds: 0, details: '' };
+  $('#dlgBody').innerHTML = `
+    <h3>${esc(r.name)} <span class="badge ${k ? 'blk' : 'free'}">${k ? 'Zablokowany' : 'Wolny'}</span><button class="x" aria-label="Zamknij">×</button></h3>
+    <div class="meta">${plDay(day)}${k && isAdmin() ? ` · zablokował(a): ${esc(who(k.by))}, ${when(k.at)}` : ''}</div>
+    ${ed ? `<div class="row">${k ? '<button class="big free" data-bact="free">Odblokuj pokój</button>' : '<button class="big blk" data-bact="block">Zablokuj pokój</button>'}</div>` : ''}
+    <div class="row"><label class="f">Gość / wesele</label><input type="text" data-b="note" value="${esc(v.note)}" ${dis} placeholder="np. wesele Kowalskich, p. Nowak"></div>
+    <div class="row"><label class="f">Łóżka dostawkowe</label><div class="stepper">
+      <button data-bbeds="-1" ${dis} aria-label="Mniej">−</button><b id="bBeds">${v.extra_beds}</b><button data-bbeds="1" ${dis} aria-label="Więcej">+</button></div></div>
+    <div class="row"><label class="f">Notatka</label><textarea data-b="details" ${dis} placeholder="np. łóżeczko dla dziecka, późny przyjazd">${esc(v.details)}</textarea></div>`;
+}
+
+async function saveBlock(id, patch) {
+  const { data, error } = await sb.from('pokoje_blocks').update(patch).eq('room_id', id).eq('day', day).select();
+  if (error || !data.length) alert('Nie zapisano' + (error ? ': ' + error.message : ', blokada mogła zostać usunięta.'));
+  loadBlocks();
+}
+$('#dlgBody').addEventListener('click', async e => {
+  if (!openBlk) return;
+  const id = openBlk, k = blockOf(id, day), act = e.target.dataset.bact, step = e.target.dataset.bbeds;
+  if (step) {
+    const v = +$('#bBeds').textContent + +step;
+    if (v < 0 || v > 3) return;
+    if (k) return saveBlock(id, { extra_beds: v });
+    $('#bBeds').textContent = v;
+  }
+  if (act === 'block') {
+    const { error } = await sb.from('pokoje_blocks').insert({ room_id: id, day,
+      note: $('[data-b=note]').value.trim(), details: $('[data-b=details]').value.trim(), extra_beds: +$('#bBeds').textContent });
+    if (error) alert(error.code === '23505' ? 'Ktoś przed chwilą zablokował ten pokój.' : 'Nie zapisano: ' + error.message);
+    loadBlocks();
+  }
+  if (act === 'free') {
+    const { error } = await sb.from('pokoje_blocks').delete().eq('room_id', id).eq('day', day);
+    if (error) alert('Nie odblokowano: ' + error.message);
+    await loadBlocks();
+    if (openBlk === id) blockSheet(id);
+  }
+});
+$('#dlgBody').addEventListener('change', e => {
+  const f = e.target.dataset.b;
+  if (openBlk && f && blockOf(openBlk, day)) saveBlock(openBlk, { [f]: e.target.value.trim() });
+});
+
 $('#bulkBtn').onclick = () => {
-  openId = null;
+  openId = openBlk = null;
   const t = todayISO();
   $('#dlgBody').innerHTML = `<h3>Zablokuj pokoje w hotelu<button class="x" aria-label="Zamknij">×</button></h3>
     <p class="meta">Blokujemy pierwsze wolne pokoje według numerów. Na przykład 10 pokoi to Hotel 1 do 10, a jeśli któryś jest już zajęty, bierzemy kolejny.</p>
@@ -439,7 +506,7 @@ const evFields = (kind, data) => EVENT_COLS[kind].map(c => `<div class="row"><la
 const evValues = () => Object.fromEntries([...document.querySelectorAll('#evForm [data-col]')].map(x => [x.dataset.col, x.value.trim()]).filter(([, v]) => v));
 
 function evSheet(e) {
-  openId = null;
+  openId = openBlk = null;
   const kind = e?.kind || 'impreza';
   $('#dlgBody').innerHTML = `<h3>${e ? 'Edytuj imprezę' : 'Nowa impreza'}<button class="x" aria-label="Zamknij">×</button></h3>
     <form id="evForm" data-id="${e?.id || ''}">
@@ -528,8 +595,8 @@ async function roomSheet(id) {
   if (dlg.open && dlg.contains(document.activeElement) && document.activeElement.matches('input[type=text],textarea')) return;
   $('#dlgBody').innerHTML = `
     <h3>${esc(r.name)} <span class="badge ${s}">${STATE_TXT[s]}</span><button class="x" aria-label="Zamknij">×</button></h3>
-    <div class="meta">${r.updated_by ? `Ostatnia zmiana: ${esc(who(r.updated_by))}, ${when(r.updated_at)}` : ''}</div>
-    ${(k => k ? `<p class="msg">📅 Zablokowany na dziś${k.note ? ': ' + esc(k.note) : ''}</p>` : '')(blockOf(r.id, todayISO()))}
+    <div class="meta">${r.updated_by && isAdmin() ? `Ostatnia zmiana: ${esc(who(r.updated_by))}, ${when(r.updated_at)}` : ''}</div>
+    ${(k => k ? `<p class="msg">📅 Zablokowany na dziś${k.note ? ': ' + esc(k.note) : ''}${k.extra_beds ? `, dostawki: ${k.extra_beds}` : ''}${k.details ? `<br>${esc(k.details)}` : ''}</p>` : '')(blockOf(r.id, todayISO()))}
     ${canEdit() ? `<div class="row">${r.occupied
       ? '<button class="big free" data-act="free">Zwolnij pokój</button>'
       : '<button class="big take" data-act="take">Zajmij pokój</button>'}</div>` : ''}
@@ -538,7 +605,8 @@ async function roomSheet(id) {
       <button data-beds="-1" ${dis} aria-label="Mniej">−</button><b>${r.extra_beds}</b><button data-beds="1" ${dis} aria-label="Więcej">+</button></div></div>
     <div class="row"><label class="f">Notatka</label><textarea data-f="note" ${dis} placeholder="np. zepsuta lampka, łóżeczko dla dziecka">${esc(r.note)}</textarea></div>
     ${canEdit() ? `<div class="row"><label class="f">Nazwa pokoju</label><input type="text" data-f="name" value="${esc(r.name)}"></div>` : ''}
-    <div class="row"><label class="f">Historia pokoju</label><ul class="log" id="roomLog"><li class="meta">Wczytuję…</li></ul></div>`;
+    ${isAdmin() ? '<div class="row"><label class="f">Historia pokoju</label><ul class="log" id="roomLog"><li class="meta">Wczytuję…</li></ul></div>' : ''}`;
+  if (!isAdmin()) return;
   const { data } = await sb.from('pokoje_log').select('*').eq('room_id', id).order('at', { ascending: false }).limit(15);
   const el = $('#roomLog');
   if (el) el.innerHTML = logItems(data, false);
@@ -573,7 +641,7 @@ const logItems = (rows, withRoom) => rows?.length
   : '<li class="meta">Brak zmian.</li>';
 
 $('#histBtn').onclick = async () => {
-  openId = null;
+  openId = openBlk = null;
   $('#dlgBody').innerHTML = `<h3>Ostatnie zmiany<button class="x" aria-label="Zamknij">×</button></h3><ul class="log" id="allLog"><li class="meta">Wczytuję…</li></ul>`;
   dlg.showModal();
   const { data } = await sb.from('pokoje_log').select('*').order('at', { ascending: false }).limit(100);
@@ -581,25 +649,25 @@ $('#histBtn').onclick = async () => {
 };
 
 // ── Team + settings ──
-$('#teamBtn').onclick = () => { openId = null; teamSheet(); dlg.showModal(); };
+$('#teamBtn').onclick = () => { openId = openBlk = null; teamSheet(); dlg.showModal(); };
 
 function teamSheet() {
   const ed = canEdit();
   $('#dlgBody').innerHTML = `
     <h3>Zespół<button class="x" aria-label="Zamknij">×</button></h3>
-    <p class="meta">Edycja: zmienia stan pokoi i dodaje osoby. Podgląd: tylko widzi.</p>
+    <p class="meta">Admin: wszystko, także historia zmian. Edycja: zmienia pokoje, imprezy i zespół. Podgląd: tylko widzi.</p>
     <div class="staff">${staff.map(s => `<span>${esc(s.name || shortEmail(s.email))}<br><small class="meta">${esc(shortEmail(s.email))}${isLocal(s.email) ? '' : ' · przez Google'}</small></span>
-      ${ed && !s.locked && s.email !== me ? `<select data-role="${esc(s.email)}"><option value="edit" ${s.role === 'edit' ? 'selected' : ''}>edycja</option><option value="view" ${s.role === 'view' ? 'selected' : ''}>podgląd</option></select>
+      ${ed && !s.locked && s.email !== me && (s.role !== 'admin' || isAdmin()) ? `<select data-role="${esc(s.email)}">${roleOptions(s.role)}</select>
       ${isLocal(s.email) ? `<button class="btn" data-pw="${esc(s.email)}">Hasło</button>` : '<span></span>'}
       <button class="btn" data-del="${esc(s.email)}">Usuń</button>`
-      : `<span class="meta">${s.role === 'edit' ? 'edycja' : 'podgląd'}${s.locked ? ' 🔒' : s.email === me ? ' (Ty)' : ''}</span><span></span><span></span>`}`).join('')}</div>
+      : `<span class="meta">${ROLE_TXT[s.role]}${s.locked ? ' 🔒' : s.email === me ? ' (Ty)' : ''}</span><span></span><span></span>`}`).join('')}</div>
     ${ed ? `<form id="teamForm" class="row">
       <label class="f">Dodaj osobę</label>
       <input type="text" name="name" placeholder="imię i nazwisko">
       <input type="text" name="login" placeholder="login, np. ania.k (albo adres Gmail)" autocapitalize="none" required style="margin-top:8px">
       <input type="text" name="password" placeholder="hasło startowe, min. 8 znaków" autocomplete="off" style="margin-top:8px">
       <p class="meta">Podaj login i hasło. Osoba z kontem Google może zamiast loginu podać adres Gmail, wtedy hasło nie jest potrzebne.</p>
-      <div style="display:flex;gap:8px"><select name="role" style="width:auto"><option value="view">podgląd</option><option value="edit">edycja</option></select>
+      <div style="display:flex;gap:8px"><select name="role" style="width:auto">${roleOptions('view')}</select>
       <button class="btn pri">Dodaj</button></div></form>
     <div class="row"><label class="f">Ile mamy łóżek dostawkowych w sumie?</label>
       <input type="number" min="0" id="bedsTotal" value="${settings.extra_beds_total ?? ''}" placeholder="nie wiadomo"></div>` : ''}`;

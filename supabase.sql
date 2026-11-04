@@ -14,6 +14,16 @@ language sql stable security definer set search_path = public as $$
 $$;
 grant execute on function pokoje_role() to authenticated;
 
+-- Roles: admin (owner, also sees the history), edit, view.
+alter table pokoje_staff drop constraint if exists pokoje_staff_role_check;
+alter table pokoje_staff add constraint pokoje_staff_role_check check (role in ('admin', 'edit', 'view'));
+create or replace function pokoje_can_edit() returns boolean
+language sql stable security definer set search_path = public as $$
+  select coalesce(pokoje_role() in ('admin', 'edit'), false)
+$$;
+revoke execute on function pokoje_can_edit() from public, anon;
+grant execute on function pokoje_can_edit() to authenticated;
+
 -- For the pokoje-staff edge function (service role only).
 create or replace function pokoje_user_id(p_email text) returns uuid
 language sql stable security definer set search_path = public as $$
@@ -76,37 +86,39 @@ alter table pokoje_log enable row level security;
 
 drop policy if exists r on pokoje_staff;
 drop policy if exists w on pokoje_staff;
-create policy r on pokoje_staff for select to authenticated using (pokoje_role() is not null);
+create policy r on pokoje_staff for select to authenticated using (pokoje_can_edit());
 drop policy if exists i on pokoje_staff;
 drop policy if exists u on pokoje_staff;
 drop policy if exists d on pokoje_staff;
 -- Editors manage others, never themselves (no locking yourself out) and never locked rows.
-create policy i on pokoje_staff for insert to authenticated with check (pokoje_role() = 'edit' and not locked);
+-- Only admins create, change or remove admins.
+create policy i on pokoje_staff for insert to authenticated
+  with check (pokoje_can_edit() and not locked and (role <> 'admin' or pokoje_role() = 'admin'));
 create policy u on pokoje_staff for update to authenticated
-  using (pokoje_role() = 'edit' and not locked and email <> lower(auth.jwt() ->> 'email'))
-  with check (not locked);
+  using (pokoje_can_edit() and not locked and email <> lower(auth.jwt() ->> 'email') and (role <> 'admin' or pokoje_role() = 'admin'))
+  with check (not locked and (role <> 'admin' or pokoje_role() = 'admin'));
 create policy d on pokoje_staff for delete to authenticated
-  using (pokoje_role() = 'edit' and not locked and email <> lower(auth.jwt() ->> 'email'));
+  using (pokoje_can_edit() and not locked and email <> lower(auth.jwt() ->> 'email') and (role <> 'admin' or pokoje_role() = 'admin'));
 
 drop policy if exists r on pokoje_rooms;
 drop policy if exists w on pokoje_rooms;
 create policy r on pokoje_rooms for select to authenticated using (pokoje_role() is not null);
-create policy w on pokoje_rooms for update to authenticated using (pokoje_role() = 'edit') with check (pokoje_role() = 'edit');
+create policy w on pokoje_rooms for update to authenticated using (pokoje_can_edit()) with check (pokoje_can_edit());
 
 drop policy if exists r on pokoje_settings;
 drop policy if exists w on pokoje_settings;
 create policy r on pokoje_settings for select to authenticated using (pokoje_role() is not null);
-create policy w on pokoje_settings for update to authenticated using (pokoje_role() = 'edit') with check (pokoje_role() = 'edit');
+create policy w on pokoje_settings for update to authenticated using (pokoje_can_edit()) with check (pokoje_can_edit());
 
 drop policy if exists r on pokoje_log;
-create policy r on pokoje_log for select to authenticated using (pokoje_role() is not null);
+create policy r on pokoje_log for select to authenticated using (pokoje_role() = 'admin');
 
 do $$ begin
   alter publication supabase_realtime add table pokoje_rooms;
 exception when duplicate_object then null;
 end $$;
 
--- Seed: manor rooms 27-30 (30 for newlyweds), hotel rooms 1-28 without 11. Rename in the app.
+-- Seed: manor rooms 27-30 (30 for newlyweds), hotel rooms 1-27 (ids h1-h28 skip h11; h12 is named Hotel 11). Rename in the app.
 insert into pokoje_rooms (id, building, sort, name) values
   ('d1', 'dworek', 1, 'Dworek 27'),
   ('d2', 'dworek', 2, 'Dworek 28'),
@@ -114,7 +126,7 @@ insert into pokoje_rooms (id, building, sort, name) values
   ('d4', 'dworek', 4, 'Dworek 30 (małżeński)')
 on conflict do nothing;
 insert into pokoje_rooms (id, building, sort, name)
-  select 'h' || n, 'hotel', n, 'Hotel ' || n from generate_series(1, 28) n where n <> 11
+  select 'h' || n, 'hotel', n, 'Hotel ' || (case when n > 11 then n - 1 else n end) from generate_series(1, 28) n where n <> 11
 on conflict do nothing;
 insert into pokoje_settings (id) values (1) on conflict do nothing;
 -- Owner (once, by hand): insert into pokoje_staff (email, name, role, locked) values ('you@example.com', 'Imię', 'edit', true);
@@ -159,8 +171,8 @@ drop policy if exists i on pokoje_blocks;
 drop policy if exists d on pokoje_blocks;
 create policy r on pokoje_blocks for select to authenticated using (pokoje_role() is not null);
 create policy i on pokoje_blocks for insert to authenticated
-  with check (pokoje_role() = 'edit' and day >= pokoje_today() and by = lower(auth.jwt() ->> 'email'));
-create policy d on pokoje_blocks for delete to authenticated using (pokoje_role() = 'edit' and day >= pokoje_today());
+  with check (pokoje_can_edit() and day >= pokoje_today() and by = lower(auth.jwt() ->> 'email'));
+create policy d on pokoje_blocks for delete to authenticated using (pokoje_can_edit() and day >= pokoje_today());
 revoke all on pokoje_blocks from anon, authenticated;
 grant select, insert, delete on pokoje_blocks to authenticated;
 
@@ -170,7 +182,7 @@ create or replace function pokoje_block_hotel(p_from date, p_to date, p_count in
 returns text[] language plpgsql security invoker set search_path = public as $$
 declare picked text[];
 begin
-  if pokoje_role() is distinct from 'edit' then raise exception 'Brak uprawnień.'; end if;
+  if not pokoje_can_edit() then raise exception 'Brak uprawnień.'; end if;
   if p_from < pokoje_today() then raise exception 'Nie można blokować dni, które minęły.'; end if;
   if p_to < p_from then raise exception 'Data „do” jest wcześniejsza niż „od”.'; end if;
   if p_to > p_from + 60 then raise exception 'Naraz można zablokować najwyżej 61 dni.'; end if;
@@ -238,7 +250,7 @@ create trigger pokoje_events_stamp before update on pokoje_events for each row e
 drop policy if exists r on pokoje_events;
 drop policy if exists w on pokoje_events;
 create policy r on pokoje_events for select to authenticated using (pokoje_role() is not null);
-create policy w on pokoje_events for all to authenticated using (pokoje_role() = 'edit') with check (pokoje_role() = 'edit');
+create policy w on pokoje_events for all to authenticated using (pokoje_can_edit()) with check (pokoje_can_edit());
 revoke all on pokoje_events from anon, authenticated;
 grant select, insert, update, delete on pokoje_events to authenticated;
 revoke all on sequence pokoje_events_id_seq from anon;
@@ -268,9 +280,9 @@ drop policy if exists pokoje_files_d on storage.objects;
 create policy pokoje_files_r on storage.objects for select to authenticated
   using (bucket_id = 'pokoje-files' and public.pokoje_role() is not null);
 create policy pokoje_files_i on storage.objects for insert to authenticated
-  with check (bucket_id = 'pokoje-files' and public.pokoje_role() = 'edit');
+  with check (bucket_id = 'pokoje-files' and public.pokoje_can_edit());
 create policy pokoje_files_d on storage.objects for delete to authenticated
-  using (bucket_id = 'pokoje-files' and public.pokoje_role() = 'edit');
+  using (bucket_id = 'pokoje-files' and public.pokoje_can_edit());
 
 -- Storage keys can't hold Polish letters reliably, so the original file name lives here.
 create table if not exists pokoje_files (
@@ -288,11 +300,21 @@ drop policy if exists r on pokoje_files;
 drop policy if exists i on pokoje_files;
 drop policy if exists d on pokoje_files;
 create policy r on pokoje_files for select to authenticated using (pokoje_role() is not null);
-create policy i on pokoje_files for insert to authenticated with check (pokoje_role() = 'edit' and by = lower(auth.jwt() ->> 'email'));
-create policy d on pokoje_files for delete to authenticated using (pokoje_role() = 'edit');
+create policy i on pokoje_files for insert to authenticated with check (pokoje_can_edit() and by = lower(auth.jwt() ->> 'email'));
+create policy d on pokoje_files for delete to authenticated using (pokoje_can_edit());
 revoke all on pokoje_files from anon, authenticated;
 grant select, insert, delete on pokoje_files to authenticated;
 revoke all on sequence pokoje_files_id_seq from anon;
 grant usage on sequence pokoje_files_id_seq to authenticated;
 drop trigger if exists pokoje_files_bump on pokoje_files;
 create trigger pokoje_files_bump after insert or delete on pokoje_files for each statement execute function pokoje_events_bump();
+
+-- Block details like the room sheet on "Dziś": guest (note), extra beds, notes.
+alter table pokoje_blocks add column if not exists extra_beds int not null default 0 check (extra_beds between 0 and 3);
+alter table pokoje_blocks add column if not exists details text not null default '';
+drop policy if exists u on pokoje_blocks;
+create policy u on pokoje_blocks for update to authenticated
+  using (pokoje_can_edit() and day >= pokoje_today()) with check (pokoje_can_edit() and day >= pokoje_today());
+grant update (note, extra_beds, details) on pokoje_blocks to authenticated;
+drop trigger if exists pokoje_blocks_bump on pokoje_blocks;
+create trigger pokoje_blocks_bump after insert or update or delete on pokoje_blocks for each statement execute function pokoje_blocks_bump();
