@@ -4,91 +4,140 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Dworek</title>
-<meta name="theme-color" content="#1f2937">
+<meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#060b16" media="(prefers-color-scheme: dark)">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
 <style>
-  :root { --bg:#f3f4f6; --card:#fff; --ink:#111827; --mute:#6b7280; --line:#e5e7eb;
-    --free:#16a34a; --free-bg:#dcfce7; --occ:#b91c1c; --occ-bg:#fee2e2; --blk:#7c3aed; --blk-bg:#ede9fe; }
+  /* Design tokens: direction "B. Recepcja" (design-preview.html). Components use only these. */
+  :root {
+    color-scheme: light dark;
+    --font: 'IBM Plex Sans', -apple-system, system-ui, sans-serif;
+    --t-cap: 12px; --t-small: 14px; --t-body: 16px; --t-title: 20px; --t-num: 22px;
+    --r-card: 8px; --r-ctl: 6px; --r-pill: 999px; --tap: 44px;
+    --bg: #eef1f5; --surface: #ffffff; --track: #e2e8f0; --ink: #0f172a; --muted: #475569;
+    --line: #dbe1e8; --field: #7b8696; --focus: #1d4ed8;
+    --primary: #1d4ed8; --on-primary: #ffffff;
+    --header-bg: #0f172a; --header-ink: #ffffff; --header-btn: rgba(255,255,255,.12);
+    --free-bg: #dcfce7; --free-fg: #166534; --occ-bg: #fee2e2; --occ-fg: #991b1b; --blk-bg: #ede9fe; --blk-fg: #5b21b6;
+    --ev-impreza: #92400e; --ev-komunia: #0f766e; --on-ev: #ffffff; --ev-impreza-line: #92400e; --ev-komunia-line: #0f766e;
+    --backdrop: rgba(15,23,42,.5);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0b1220; --surface: #131c2e; --track: #1c2740; --ink: #e5e9f0; --muted: #9aa6b8;
+      --line: #24314a; --field: #66748c; --focus: #93b4ff;
+      --primary: #93b4ff; --on-primary: #0b1220;
+      --header-bg: #060b16; --header-ink: #e5e9f0;
+      --free-bg: #0f2e1d; --free-fg: #86efac; --occ-bg: #3b1414; --occ-fg: #fca5a5; --blk-bg: #2a1f4a; --blk-fg: #c4b5fd;
+      --ev-impreza-line: #d97706; --ev-komunia-line: #14b8a6;
+      --backdrop: rgba(0,0,0,.6);
+    }
+  }
   * { box-sizing:border-box; }
-  body { margin:0; font:16px/1.4 -apple-system,system-ui,sans-serif; background:var(--bg); color:var(--ink); }
+  body { margin:0; font:var(--t-body)/1.5 var(--font); background:var(--bg); color:var(--ink); -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale; }
   [hidden] { display:none !important; }
   button { font:inherit; cursor:pointer; }
-  header { position:sticky; top:0; z-index:2; background:#1f2937; color:#fff; padding:10px 16px calc(10px);
+  header { position:sticky; top:0; z-index:2; background:var(--header-bg); color:var(--header-ink); padding:10px 16px calc(10px);
     padding-top:max(10px, env(safe-area-inset-top)); display:flex; gap:8px; align-items:center; }
-  header h1 { font-size:18px; margin:0; flex:1; }
-  header button { background:#374151; color:#fff; border:0; border-radius:8px; padding:6px 10px; font-size:14px; }
+  header h1 { font-size:var(--t-title); line-height:1.2; margin:0; flex:1; font-weight:600; }
+  header button { background:var(--header-btn); color:var(--header-ink); border:0; border-radius:var(--r-ctl); padding:6px 10px; font-size:var(--t-small); font-weight:500; }
   .wrap { max-width:960px; margin:0 auto; padding:12px 16px 40px; }
-  #stats { display:grid; grid-template-columns:repeat(4,1fr); gap:8px; margin-bottom:12px; }
-  .stat { background:var(--card); border-radius:10px; padding:8px; text-align:center; }
-  .stat b { display:block; font-size:22px; }
-  .stat small { color:var(--mute); font-size:12px; }
-  #filters { display:flex; gap:6px; overflow-x:auto; margin-bottom:8px; }
-  #filters button { border:1px solid var(--line); background:var(--card); border-radius:99px; padding:6px 12px; white-space:nowrap; font-size:14px; }
-  #filters button.on { background:var(--ink); color:#fff; border-color:var(--ink); }
-  h2 { font-size:15px; color:var(--mute); margin:16px 0 8px; text-transform:uppercase; letter-spacing:.04em; }
+  #stats { display:grid; grid-template-columns:repeat(2, minmax(0, 1fr)); gap:8px; margin-bottom:12px; }
+  @media (min-width:640px) { #stats { grid-template-columns:repeat(4, minmax(0, 1fr)); } }
+  .stat { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-card); padding:8px 12px; display:flex; align-items:baseline; gap:8px; }
+  .stat b { font-size:var(--t-num); line-height:1.2; font-variant-numeric:tabular-nums; white-space:nowrap; }
+  .stat small { color:var(--muted); font-size:var(--t-small); }
+  html { scroll-padding-top:72px; }
+  #filters { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:8px; }
+  #filters button { min-height:var(--tap); border:1px solid var(--field); background:var(--surface); color:var(--ink); border-radius:var(--r-pill); padding:6px 12px; white-space:nowrap; font-size:14px; }
+  #filters button.on { background:var(--ink); color:var(--bg); border-color:var(--ink); }
+  h2 { font-size:var(--t-cap); color:var(--muted); margin:16px 0 8px; text-transform:uppercase; letter-spacing:.04em; }
   .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(120px,1fr)); gap:8px; }
-  .tile { text-align:left; border:0; border-left:5px solid; border-radius:10px; padding:8px 10px; min-height:72px; display:flex; flex-direction:column; gap:2px; color:var(--ink); }
-  .tile.free { background:var(--free-bg); border-color:var(--free); }
-  .tile.occ { background:var(--occ-bg); border-color:var(--occ); }
-  .tile.blk { background:var(--blk-bg); border-color:var(--blk); }
+  .tile { text-align:start; border:1px solid var(--line); border-inline-start:5px solid; border-radius:var(--r-card); padding:8px 10px; min-height:72px; display:flex; flex-direction:column; gap:2px; color:var(--ink); }
+  .tile.free { background:var(--free-bg); border-inline-start-color:var(--free-fg); }
+  .tile.occ { background:var(--occ-bg); border-inline-start-color:var(--occ-fg); }
+  .tile.blk { background:var(--blk-bg); border-inline-start-color:var(--blk-fg); }
   .tile:disabled { cursor:default; }
-  .tabs { display:flex; background:#e5e7eb; border-radius:10px; padding:3px; margin-bottom:12px; }
-  .tabs button { flex:1; border:0; background:none; border-radius:8px; padding:8px; font-weight:600; color:var(--mute); }
-  .tabs button.on { background:#fff; color:var(--ink); box-shadow:0 1px 2px rgba(0,0,0,.1); }
+  .tabs { display:flex; background:var(--track); border-radius:calc(var(--r-ctl) + 3px); padding:3px; margin-bottom:12px; }
+  .tabs button { flex:1; border:0; background:none; border-radius:var(--r-ctl); padding:8px; font-weight:600; color:var(--muted); }
+  .tabs button.on { background:var(--primary); color:var(--on-primary); }
   .calhead { display:flex; align-items:center; justify-content:space-between; margin-bottom:8px; }
   .calhead b { font-size:18px; text-transform:capitalize; }
-  .calhead button { width:40px; height:40px; border:1px solid var(--line); background:#fff; border-radius:8px; font-size:20px; }
+  .calhead button { width:var(--tap); height:var(--tap); border:1px solid var(--field); background:var(--surface); color:var(--ink); border-radius:var(--r-ctl); font-size:20px; }
   #calGrid, #evGrid { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; }
-  .dow { text-align:center; font-size:12px; color:var(--mute); padding:4px 0; }
-  .day { border:1px solid var(--line); background:#fff; border-radius:8px; min-height:52px; padding:4px; display:flex; flex-direction:column; align-items:center; gap:2px; }
-  .day span { font-weight:600; }
-  .day small { font-size:11px; color:#fff; background:var(--blk); border-radius:99px; padding:0 6px; white-space:nowrap; }
-  .day.other { opacity:.4; } .day.past span { color:var(--mute); }
-  .day.today { border-color:var(--ink); } .day.sel { outline:3px solid var(--blk); outline-offset:-1px; }
-  .day small.ev { background:#b45309; }
-  .ev { background:var(--card); border-radius:10px; padding:10px 12px; margin-bottom:8px; border-left:5px solid #b45309; }
-  .ev.komunia { border-left-color:#2563eb; }
+  .dow { text-align:center; font-size:var(--t-cap); color:var(--muted); padding:4px 0; }
+  .day { border:1px solid var(--line); background:var(--surface); color:var(--ink); border-radius:var(--r-ctl); min-height:52px; padding:4px; display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .day span { font-weight:600; font-variant-numeric:tabular-nums; }
+  .day small { font-size:var(--t-cap); color:var(--blk-fg); background:var(--blk-bg); border-radius:var(--r-pill); font-weight:600; font-variant-numeric:tabular-nums; padding:0 6px; white-space:nowrap; }
+  .day.other, .day.past span { color:var(--muted); } .day.other { background:transparent; }
+  .day.today { border-color:var(--ink); } .day.sel { box-shadow:inset 0 0 0 3px var(--primary); }
+  .day small.ev { background:var(--ev-impreza); color:var(--on-ev); }
+  .ev { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-card); padding:10px 12px; margin-bottom:8px; border-inline-start:5px solid var(--ev-impreza-line); }
+  .ev.komunia { border-inline-start-color:var(--ev-komunia-line); }
   .evh { display:flex; align-items:center; gap:8px; margin-bottom:4px; }
-  .evh .btn { margin-left:auto; padding:4px 10px; font-size:14px; }
-  .badge.impreza { background:#b45309; } .badge.komunia { background:#2563eb; }
-  .ev dl { display:grid; grid-template-columns:auto 1fr; gap:2px 10px; margin:0; font-size:14px; }
-  .ev dt { color:var(--mute); } .ev dd { margin:0; overflow-wrap:anywhere; }
+  .evh .btn { margin-inline-start:auto; padding:4px 10px; font-size:var(--t-small); }
+  .badge.impreza { background:var(--ev-impreza); color:var(--on-ev); } .badge.komunia { background:var(--ev-komunia); color:var(--on-ev); }
+  .ev dl { display:grid; grid-template-columns:auto 1fr; gap:2px 10px; margin:0; font-size:var(--t-small); }
+  .ev dt { color:var(--muted); } .ev dd { margin:0; overflow-wrap:anywhere; }
   #todayEv:empty { display:none; }
   .files { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; align-items:center; }
-  .file { display:inline-flex; align-items:center; gap:2px; background:var(--bg); border-radius:8px; padding:4px 8px; font-size:14px; max-width:100%; }
-  .file a { color:var(--ink); overflow-wrap:anywhere; }
-  .file button { border:0; background:none; font-size:18px; line-height:1; color:var(--mute); padding:0 2px; }
-  .up { font-size:14px; padding:4px 10px; }
-  .msg { background:var(--blk-bg); border-radius:8px; padding:8px 10px; font-size:14px; }
-  .tile b { font-size:15px; }
-  .tile small { color:var(--mute); font-size:13px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-  .tile .ic { font-size:13px; margin-top:auto; }
-  .empty { color:var(--mute); }
-  dialog { border:0; border-radius:14px; padding:0; width:min(520px, calc(100vw - 32px)); max-height:calc(100vh - 32px); }
-  dialog::backdrop { background:rgba(0,0,0,.4); }
+  .file { display:inline-flex; align-items:center; gap:2px; background:var(--bg); border-radius:var(--r-ctl); padding:4px 8px; font-size:var(--t-small); max-width:100%; }
+  .file a { color:var(--primary); overflow-wrap:anywhere; }
+  .ev a { color:var(--primary); }
+  .file button { border:0; background:none; font-size:20px; line-height:1; color:var(--muted); min-width:var(--tap); min-height:var(--tap); }
+  .up { font-size:var(--t-small); padding:4px 10px; }
+  .msg { background:var(--surface); border:1px solid var(--line); border-radius:var(--r-ctl); padding:8px 10px; font-size:var(--t-small); }
+  .tile b { font-size:var(--t-body); line-height:1.25; }
+  .tile small { color:var(--muted); font-size:var(--t-small); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tile .ic { font-size:var(--t-cap); color:var(--muted); margin-top:auto; }
+  .empty { color:var(--muted); }
+  dialog { border:0; background:var(--surface); color:var(--ink); border-radius:calc(var(--r-card) + 4px); padding:0; width:min(520px, calc(100vw - 32px)); max-height:calc(100vh - 32px); }
+  dialog::backdrop { background:var(--backdrop); }
   .sheet { padding:16px; }
-  .sheet h3 { margin:0 0 4px; font-size:20px; display:flex; align-items:center; gap:8px; }
-  .sheet h3 .x { margin-left:auto; border:0; background:none; font-size:24px; line-height:1; padding:0 4px; }
-  .badge { font-size:12px; padding:2px 8px; border-radius:99px; color:#fff; }
-  .badge.free { background:var(--free); } .badge.occ { background:var(--occ); } .badge.blk { background:var(--blk); }
+  .sheet h3 { margin:0 0 4px; font-size:var(--t-title); line-height:1.2; display:flex; align-items:center; gap:8px; }
+  .sheet h3 .x { margin-inline-start:auto; border:0; background:var(--bg); color:var(--ink); border-radius:var(--r-ctl); font-size:24px; line-height:1; min-width:var(--tap); min-height:var(--tap); }
+  .badge { font-size:var(--t-cap); font-weight:600; padding:2px 8px; border-radius:var(--r-pill); }
+  .badge.free { background:var(--free-bg); color:var(--free-fg); } .badge.occ { background:var(--occ-bg); color:var(--occ-fg); } .badge.blk { background:var(--blk-bg); color:var(--blk-fg); }
   .row { margin:12px 0; }
-  label.f { display:block; font-size:13px; color:var(--mute); margin-bottom:4px; }
-  input[type=text], input[type=email], input[type=password], input[type=number], input[type=date], textarea, select { width:100%; font:inherit; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:#fff; }
+  .f { display:block; font-size:var(--t-small); font-weight:500; color:var(--muted); margin-bottom:4px; }
+  label.f > input, label.f > select, label.f > textarea { display:block; margin-top:4px; font-weight:400; }
+  .st { display:inline-flex; align-items:center; gap:5px; align-self:flex-start; font-size:var(--t-cap); font-weight:600; line-height:1.4; padding:1px 8px; border-radius:var(--r-pill); background:var(--surface); }
+  .st svg { width:13px; height:13px; flex:none; }
+  .st.free { color:var(--free-fg); } .st.occ { color:var(--occ-fg); } .st.blk { color:var(--blk-fg); }
+  .err { border-color:var(--occ-fg); }
+  .err .btn { margin-top:8px; }
+  .acts { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:8px; margin-top:16px; }
+  #ask { width:min(420px, calc(100vw - 32px)); }
+  input[type=text], input[type=email], input[type=password], input[type=number], input[type=date], textarea, select { width:100%; font:inherit; color:var(--ink); padding:8px 10px; min-height:var(--tap); border:1px solid var(--field); border-radius:var(--r-ctl); background:var(--surface); }
   textarea { min-height:60px; resize:vertical; }
-  .big { width:100%; border:0; border-radius:10px; padding:12px; font-weight:600; color:#fff; font-size:17px; }
-  .big.take { background:var(--occ); } .big.free { background:var(--free); } .big.blk { background:var(--blk); }
+  .big { width:100%; border:0; border-radius:var(--r-ctl); padding:12px; min-height:48px; font-weight:600; font-size:var(--t-body); background:var(--primary); color:var(--on-primary); }
   .stepper { display:flex; align-items:center; gap:12px; }
-  .stepper button { width:40px; height:40px; border-radius:8px; border:1px solid var(--line); background:#fff; font-size:20px; }
-  .stepper b { font-size:20px; min-width:20px; text-align:center; }
-  .log { list-style:none; padding:0; margin:0; font-size:14px; }
+  .stepper button { width:var(--tap); height:var(--tap); border-radius:var(--r-ctl); border:1px solid var(--field); background:var(--surface); color:var(--ink); font-size:20px; }
+  .stepper b { font-size:20px; min-width:20px; text-align:center; font-variant-numeric:tabular-nums; }
+  .log { list-style:none; padding:0; margin:0; font-size:var(--t-small); }
   .log li { padding:6px 0; border-top:1px solid var(--line); }
-  .log small { color:var(--mute); }
-  .meta { font-size:13px; color:var(--mute); }
-  .btn { border:1px solid var(--line); background:#fff; border-radius:8px; padding:8px 12px; }
-  .btn.pri { background:var(--ink); color:#fff; border-color:var(--ink); }
-  .staff { display:grid; grid-template-columns:1fr auto auto auto; gap:6px; align-items:center; font-size:14px; }
-  #login { max-width:360px; margin:15vh auto; padding:24px 16px; text-align:center; }
+  .log small { color:var(--muted); }
+  .meta { font-size:var(--t-small); color:var(--muted); }
+  .btn { border:1px solid var(--field); background:var(--surface); color:var(--ink); border-radius:var(--r-ctl); padding:8px 12px; min-height:var(--tap); font-weight:500; }
+  .btn.pri { background:var(--primary); color:var(--on-primary); border-color:var(--primary); }
+  .btn.danger { background:var(--occ-fg); color:var(--surface); border-color:var(--occ-fg); }
+  button { -webkit-tap-highlight-color:transparent; }
+  @media (hover: hover) { .tile:hover, .btn:hover, .day:hover, #filters button:hover { filter:brightness(.96); } }
+  @media (prefers-reduced-motion: no-preference) {
+    button { transition:scale 150ms ease-out; }
+    button:not(:disabled):active { scale:.96; }
+  }
+  .staff { list-style:none; margin:12px 0 0; padding:0; font-size:var(--t-small); }
+  .staff li { padding:10px 0; border-top:1px solid var(--line); }
+  .staff .acts { justify-content:flex-start; margin-top:8px; }
+  .staff select { width:auto; min-width:120px; }
+  #login { max-width:360px; margin:12vh auto; padding:24px 16px; }
+  #login h1, #loginMsg { text-align:center; }
+  #pwForm label.f { margin-top:12px; }
   #login .btn { width:100%; margin-top:8px; padding:12px; }
   </style>
 </head>
@@ -96,10 +145,10 @@
 
 <div id="login" hidden>
   <h1>Dworek</h1>
-  <p class="meta" id="loginMsg">Zaloguj się, żeby zobaczyć stan pokoi.</p>
+  <p class="meta" id="loginMsg" role="status">Zaloguj się, żeby zobaczyć stan pokoi.</p>
   <form id="pwForm" class="row">
-    <input type="text" id="user" placeholder="login" autocomplete="username" autocapitalize="none" required>
-    <input type="password" id="pw" placeholder="hasło" autocomplete="current-password" required style="margin-top:8px">
+    <label class="f">Login<input type="text" id="user" autocomplete="username" autocapitalize="none" required></label>
+    <label class="f">Hasło<input type="password" id="pw" autocomplete="current-password" required></label>
     <button class="btn pri">Zaloguj</button>
   </form>
   <button class="btn" id="google">Zaloguj przez Google</button>
@@ -114,17 +163,18 @@
     <button id="logout">Wyloguj</button>
   </header>
   <div class="wrap">
-    <nav class="tabs" id="tabs"><button data-v="today" class="on">Dziś</button><button data-v="cal">Kalendarz</button><button data-v="ev">Imprezy</button></nav>
+    <nav class="tabs" id="tabs" aria-label="Widok"><button data-v="today" class="on" aria-pressed="true">Dziś</button><button data-v="cal" aria-pressed="false">Kalendarz</button><button data-v="ev" aria-pressed="false">Imprezy</button></nav>
+    <div class="msg err" id="netErr" role="alert" hidden><b>Nie udało się wczytać danych.</b> <span id="netErrText"></span><br><button class="btn" id="retry">Spróbuj ponownie</button></div>
     <div id="todayView">
       <p class="msg" id="todayEv"></p>
       <div id="stats"></div>
-      <nav id="filters">
-        <button data-f="all" class="on">Wszystkie</button>
-        <button data-f="free">Wolne</button>
-        <button data-f="blk">Zablokowane</button>
-        <button data-f="occ">Zajęte</button>
-      </nav>
-      <div id="board"></div>
+      <div id="filters" role="group" aria-label="Pokaż pokoje">
+        <button data-f="all" class="on" aria-pressed="true">Wszystkie</button>
+        <button data-f="free" aria-pressed="false">Wolne</button>
+        <button data-f="blk" aria-pressed="false">Zablokowane</button>
+        <button data-f="occ" aria-pressed="false">Zajęte</button>
+      </div>
+      <div id="board"><p class="meta" role="status">Wczytuję pokoje…</p></div>
     </div>
     <div id="calView" hidden>
       <div class="calhead"><button id="prevM" aria-label="Poprzedni miesiąc">‹</button><b id="monthName"></b><button id="nextM" aria-label="Następny miesiąc">›</button></div>
@@ -134,7 +184,7 @@
       <p class="msg" id="calMsg" hidden></p>
       <div id="calTools" hidden>
         <div class="row"><button class="btn pri" id="bulkBtn">Zablokuj kilka pokoi w hotelu</button></div>
-        <div class="row"><input type="text" id="blkNote" placeholder="Opis blokady, np. wesele Kowalskich"></div>
+        <div class="row"><label class="f">Opis nowych blokad<input type="text" id="blkNote" placeholder="np. wesele Kowalskich"></label></div>
       </div>
       <div id="dayRooms"></div>
     </div>
@@ -150,6 +200,7 @@
 </div>
 
 <dialog id="dlg"><div class="sheet" id="dlgBody"></div></dialog>
+<dialog id="ask" aria-labelledby="askT"></dialog>
 
 <script type="module">
 import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/+esm';
@@ -198,6 +249,38 @@ const isLocal = email => email.endsWith(LOCAL);
 const shortEmail = email => isLocal(email) ? 'login: ' + email.slice(0, -LOCAL.length) : email;
 const who = email => staff.find(s => s.email === email)?.name || (email ? shortEmail(email) : '?');
 // A room blocked in the calendar for today is not free to sell, even if nobody took it yet.
+// Polish plural: plural(1, 'pokój', 'pokoje', 'pokoi') → "1 pokój", 2 → "2 pokoje", 5 → "5 pokoi".
+const plural = (n, one, few, many) => `${n} ${{ one, few }[new Intl.PluralRules('pl').select(n)] ?? many}`;
+const STATE_ICON = {
+  free: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+  occ: '<svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="5" r="3" fill="currentColor"/><path d="M2.5 14c.6-3 2.8-4.5 5.5-4.5s4.9 1.5 5.5 4.5z" fill="currentColor"/></svg>',
+  blk: '<svg viewBox="0 0 16 16" aria-hidden="true"><rect x="3" y="7" width="10" height="7" rx="1.5" fill="currentColor"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" fill="none" stroke="currentColor" stroke-width="2"/></svg>',
+};
+// State as a word and an icon, never by colour alone.
+const stateChip = s => `<span class="st ${s}">${STATE_ICON[s]}${STATE_TXT[s]}</span>`;
+
+// One small dialog for questions, errors and confirmations; it stacks over an open sheet.
+// Resolves true/false, or the typed value/null when `field` is given.
+function ask({ title, body = '', ok = 'Zamknij', cancel = '', danger = false, field = null }) {
+  const d = $('#ask');
+  d.innerHTML = `<form method="dialog" class="sheet"><h3 id="askT">${esc(title)}</h3>
+    ${body ? `<p style="white-space:pre-line;margin:8px 0 0">${esc(body)}</p>` : ''}
+    ${field ? `<label class="f" style="margin-top:12px">${esc(field.label)}<input name="v" type="${field.type || 'text'}" autocomplete="${field.autocomplete || 'off'}" minlength="${field.min || 0}" required></label>` : ''}
+    <div class="acts">${cancel ? `<button class="btn" value="no" formnovalidate>${esc(cancel)}</button>` : ''}<button class="btn ${danger ? 'danger' : 'pri'}" value="yes">${esc(ok)}</button></div></form>`;
+  return new Promise(res => {
+    const done = yes => res(yes ? (field ? d.querySelector('[name=v]').value : true) : (field ? null : false));
+    // Answer from the clicked button itself; 'close' only covers Escape (some webviews never fire it).
+    d.querySelector('form').onsubmit = e => { e.preventDefault(); d.close(); done(e.submitter?.value === 'yes'); };
+    d.onclose = () => done(false);
+    d.showModal();
+  });
+}
+// Plain-language error with the next step; the server's own text stays as a detail.
+const errHint = e => /fetch|network|load failed/i.test(e?.message || '') ? 'Brak połączenia z internetem. Sprawdź połączenie i spróbuj ponownie.'
+  : 'Spróbuj ponownie za chwilę. Jeśli błąd się powtarza, napisz do administratora.';
+const fail = (title, e) => ask({ title, body: errHint(e) + (e?.message ? `\n\nSzczegóły: ${e.message}` : '') });
+function netError(e) { $('#netErr').hidden = !e; if (e) $('#netErrText').textContent = errHint(e); }
+
 const state = r => r.occupied ? 'occ' : blockOf(r.id, todayISO()) ? 'blk' : 'free';
 const STATE_TXT = { free: 'Wolny', blk: 'Zablokowany', occ: 'Zajęty' };
 
@@ -211,7 +294,7 @@ async function start() {
   if (!role) return showLogin(`Konto ${me} nie ma dostępu. Poproś kierownika o dodanie tego adresu w zakładce Zespół.`, true);
   $('#login').hidden = true;
   $('#app').hidden = false;
-  $("#who").textContent = `Zalogowano: ${shortEmail(me)} (${canEdit() ? ROLE_TXT[role] : 'tylko podgląd'})`;
+  $("#who").textContent = `Zalogowano jako ${isLocal(me) ? me.slice(0, -LOCAL.length) : me} (uprawnienia: ${ROLE_TXT[role]})`;
   // History is for admins, the team list for anyone who can edit.
   $('#histBtn').hidden = !isAdmin();
   $('#teamBtn').hidden = !canEdit();
@@ -257,7 +340,7 @@ async function load() {
     sb.from('pokoje_staff').select('*').order('name'),
     sb.from('pokoje_settings').select('*').maybeSingle(),
   ]);
-  if (r.error) return alert('Nie wczytano pokoi: ' + r.error.message);
+  if (r.error) return netError(r.error);
   rooms = r.data; staff = s.data || []; settings = st.data || {};
   await loadBlocks();
 }
@@ -280,7 +363,8 @@ async function loadBlocks() {
     sb.from('pokoje_events').select('*').gte('day', from).lte('day', to).order('day').order('kind').order('sort').order('id'),
   ]);
   if (seq !== loadSeq) return;
-  if (b.error || ev.error) return alert('Nie wczytano kalendarza: ' + (b.error || ev.error).message);
+  if (b.error || ev.error) return netError(b.error || ev.error);
+  netError(null);
   const f = ev.data.length ? await sb.from('pokoje_files').select('*').in('event_id', ev.data.map(e => e.id)).order('at') : { data: [] };
   if (seq !== loadSeq) return;
   blocks = b.data; events = ev.data; files = f.data || [];
@@ -298,8 +382,12 @@ async function save(id, patch, guardFree) {
   let q = sb.from('pokoje_rooms').update(patch).eq('id', id);
   if (guardFree) q = q.eq('occupied', false);
   const { data, error } = await q.select();
-  if (error) return alert('Nie zapisano: ' + error.message);
-  if (!data.length) { alert(guardFree ? 'Ktoś przed chwilą zajął ten pokój.' : 'Nie zapisano.'); return load(); }
+  if (error) return fail('Nie zapisano zmiany', error);
+  if (!data.length) {
+    ask(guardFree ? { title: 'Pokój jest już zajęty', body: 'Ktoś przed chwilą zajął ten pokój. Stan został odświeżony.' }
+      : { title: 'Nie zapisano zmiany', body: 'Możliwe, że nie masz już uprawnień do edycji. Wyloguj się i zaloguj ponownie.' });
+    return load();
+  }
   put(data[0]);
 }
 
@@ -330,15 +418,15 @@ function tile(r) {
   const s = state(r);
   const k = blockOf(r.id, todayISO());
   const ic = [r.extra_beds ? `🛏+${r.extra_beds}` : '', r.note ? '📝' : '', k && r.occupied ? '📅' : ''].join(' ');
-  const text = r.occupied ? esc(r.guest) || 'Zajęty' : k ? esc(k.note) || 'Zablokowany' : 'Wolny';
-  return `<button class="tile ${s}" data-id="${r.id}"><b>${esc(r.name)}</b><small>${text}</small><span class="ic">${ic}</span></button>`;
+  const text = r.occupied ? r.guest : k ? k.note : '';
+  return `<button class="tile ${s}" data-id="${r.id}"><b>${esc(r.name)}</b>${stateChip(s)}${text ? `<small>${esc(text)}</small>` : ''}<span class="ic">${ic}</span></button>`;
 }
 
 $('#board').onclick = e => { const t = e.target.closest('.tile'); if (t) { openBlk = null; openId = t.dataset.id; roomSheet(openId); dlg.showModal(); } };
 $('#filters').onclick = e => {
   const b = e.target.closest('button'); if (!b) return;
   filter = b.dataset.f;
-  $('#filters').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  $('#filters').querySelectorAll('button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
   render();
 };
 // 'close' fires late: if another sheet was opened meanwhile, keep its state.
@@ -350,7 +438,7 @@ function renderCal() {
   const t = todayISO(), counts = {};
   blocks.forEach(b => { counts[b.day] = (counts[b.day] || 0) + 1; });
   $('#monthName').textContent = monthTitle();
-  $('#calGrid').innerHTML = gridHtml(counts, '');
+  $('#calGrid').innerHTML = gridHtml(counts, '', ['blokada', 'blokady', 'blokad']);
   const ed = canEdit() && day >= t;
   $('#dayName').textContent = plDay(day);
   $('#dayInfo').textContent = `Zablokowane: ${counts[day] || 0} z ${rooms.length}. ` +
@@ -359,16 +447,20 @@ function renderCal() {
   $('#dayRooms').innerHTML = BUILDINGS.map(([b, label]) => `<h2>${label}</h2><div class="grid">${rooms.filter(r => r.building === b).map(r => {
     const k = blockOf(r.id, day);
     const ic = k ? [k.extra_beds ? `🛏+${k.extra_beds}` : '', k.details ? '📝' : '', isAdmin() ? esc(who(k.by)) : ''].join(' ') : '';
-    return `<button class="tile ${k ? 'blk' : 'free'}" data-blk="${r.id}"><b>${esc(r.name)}</b>
-      <small>${k ? esc(k.note) || 'Zablokowany' : 'Wolny'}</small><span class="ic meta">${ic}</span></button>`;
+    return `<button class="tile ${k ? 'blk' : 'free'}" data-blk="${r.id}"><b>${esc(r.name)}</b>${stateChip(k ? 'blk' : 'free')}
+      ${k?.note ? `<small>${esc(k.note)}</small>` : ''}<span class="ic meta">${ic}</span></button>`;
   }).join('')}</div>`).join('');
 }
 
 // Month grid shared by both calendars; counts = {day: number shown on the day}.
-function gridHtml(counts, cls) {
+// counts = {day: number}; noun = [one, few, many] for that number, e.g. blokada / blokady / blokad.
+function gridHtml(counts, cls, noun) {
   const t = todayISO();
-  return ['pn', 'wt', 'śr', 'cz', 'pt', 'so', 'nd'].map(d => `<span class="dow">${d}</span>`).join('') +
-    gridDays().map(d => `<button class="day${d.slice(0, 7) !== month ? ' other' : ''}${d < t ? ' past' : ''}${d === t ? ' today' : ''}${d === day ? ' sel' : ''}" data-day="${d}">
+  const name = d => new Date(d + 'T12:00').toLocaleDateString('pl-PL', { weekday: 'long', day: 'numeric', month: 'long' }) +
+    (counts[d] ? ', ' + plural(counts[d], ...noun) : '');
+  return ['pn', 'wt', 'śr', 'cz', 'pt', 'so', 'nd'].map(d => `<span class="dow" aria-hidden="true">${d}</span>`).join('') +
+    gridDays().map(d => `<button class="day${d.slice(0, 7) !== month ? ' other' : ''}${d < t ? ' past' : ''}${d === t ? ' today' : ''}${d === day ? ' sel' : ''}" data-day="${d}"
+      aria-label="${name(d)}" aria-pressed="${d === day}"${d === t ? ' aria-current="date"' : ''}>
       <span>${+d.slice(8)}</span>${counts[d] ? `<small class="${cls}">${counts[d]}</small>` : ''}</button>`).join('');
 }
 const monthTitle = () => { const [y, m] = month.split('-').map(Number); return new Date(y, m - 1, 15).toLocaleDateString('pl-PL', { month: 'long', year: 'numeric' }); };
@@ -378,7 +470,7 @@ function calMsg(text) { $('#calMsg').hidden = !text; $('#calMsg').textContent = 
 $('#tabs').onclick = e => {
   const b = e.target.closest('button'); if (!b) return;
   view = b.dataset.v;
-  $('#tabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
+  $('#tabs').querySelectorAll('button').forEach(x => { x.classList.toggle('on', x === b); x.setAttribute('aria-pressed', x === b); });
   $('#todayView').hidden = view !== 'today';
   $('#calView').hidden = view !== 'cal';
   $('#evView').hidden = view !== 'ev';
@@ -412,10 +504,10 @@ $('#dayRooms').onclick = e => {
 // Guest, extra beds and notes: the same fields on the room sheet ("Dziś") and the block sheet
 // (calendar). Each arg is [attribute, value]; beds may add a third, extra attribute.
 const guestFields = (dis, [gAttr, guest], [bAttr, beds, bExtra = ''], [nAttr, notes]) => `
-    <div class="row"><label class="f">Gość / wesele</label><input type="text" ${gAttr} value="${esc(guest)}" ${dis} placeholder="np. wesele Kowalskich, p. Nowak"></div>
-    <div class="row"><label class="f">Łóżka dostawkowe</label><div class="stepper">
-      <button ${bAttr}="-1" ${dis} aria-label="Mniej">−</button><b ${bExtra}>${beds}</b><button ${bAttr}="1" ${dis} aria-label="Więcej">+</button></div></div>
-    <div class="row"><label class="f">Notatka</label><textarea ${nAttr} ${dis} placeholder="np. łóżeczko dla dziecka, późny przyjazd">${esc(notes)}</textarea></div>`;
+    <div class="row"><label class="f">Gość / wesele<input type="text" ${gAttr} value="${esc(guest)}" ${dis} placeholder="np. wesele Kowalskich, p. Nowak"></label></div>
+    <div class="row" role="group" aria-labelledby="bedsL"><span class="f" id="bedsL">Łóżka dostawkowe</span><div class="stepper">
+      <button ${bAttr}="-1" ${dis} aria-label="Mniej dostawek">−</button><b ${bExtra} aria-live="polite">${beds}</b><button ${bAttr}="1" ${dis} aria-label="Więcej dostawek">+</button></div></div>
+    <div class="row"><label class="f">Notatka<textarea ${nAttr} ${dis} placeholder="np. łóżeczko dla dziecka, późny przyjazd">${esc(notes)}</textarea></label></div>`;
 
 // Same fields as the room sheet on "Dziś", for the day picked in the calendar.
 // Not blocked yet: the fields are a draft saved by "Zablokuj". Blocked: each change saves.
@@ -433,7 +525,8 @@ function blockSheet(id) {
 
 async function saveBlock(id, patch) {
   const { data, error } = await sb.from('pokoje_blocks').update(patch).eq('room_id', id).eq('day', day).select();
-  if (error || !data.length) alert('Nie zapisano' + (error ? ': ' + error.message : ', blokada mogła zostać usunięta.'));
+  if (error) fail('Nie zapisano blokady', error);
+  else if (!data.length) ask({ title: 'Nie zapisano blokady', body: 'Ktoś mógł ją przed chwilą usunąć. Kalendarz został odświeżony.' });
   loadBlocks();
 }
 $('#dlgBody').addEventListener('click', async e => {
@@ -447,15 +540,15 @@ $('#dlgBody').addEventListener('click', async e => {
   }
   if (act === 'block') {
     const r = rooms.find(x => x.id === id);
-    if (day === todayISO() && r.occupied && !confirm(`${r.name} jest teraz zajęty. Zablokować mimo to?`)) return;
+    if (day === todayISO() && r.occupied && !await ask({ title: `Zablokować ${r.name}?`, body: `Pokój jest teraz zajęty${r.guest ? ' (' + r.guest + ')' : ''}.`, ok: 'Zablokuj mimo to', cancel: 'Anuluj' })) return;
     const { error } = await sb.from('pokoje_blocks').insert({ room_id: id, day,
       note: $('[data-b=note]').value.trim(), details: $('[data-b=details]').value.trim(), extra_beds: +$('#bBeds').textContent });
-    if (error) alert(error.code === '23505' ? 'Ktoś przed chwilą zablokował ten pokój.' : 'Nie zapisano: ' + error.message);
+    if (error) error.code === '23505' ? ask({ title: 'Pokój jest już zablokowany', body: 'Ktoś przed chwilą go zablokował. Kalendarz został odświeżony.' }) : fail('Nie zablokowano pokoju', error);
     loadBlocks();
   }
   if (act === 'free') {
     const { error } = await sb.from('pokoje_blocks').delete().eq('room_id', id).eq('day', day);
-    if (error) alert('Nie odblokowano: ' + error.message);
+    if (error) fail('Nie odblokowano pokoju', error);
     await loadBlocks();
     if (openBlk === id) blockSheet(id);
   }
@@ -471,12 +564,10 @@ $('#bulkBtn').onclick = () => {
   $('#dlgBody').innerHTML = `<h3>Zablokuj pokoje w hotelu<button class="x" aria-label="Zamknij">×</button></h3>
     <p class="meta">Blokujemy pierwsze wolne pokoje według numerów. Na przykład 10 pokoi to Hotel 1 do 10, a jeśli któryś jest już zajęty, bierzemy kolejny.</p>
     <form id="bulkForm">
-      <div class="row" style="display:flex;gap:8px">
-        <div style="flex:1"><label class="f">Od dnia</label><input type="date" name="from" min="${t}" value="${day}" required></div>
-        <div style="flex:1"><label class="f">Do dnia (włącznie)</label><input type="date" name="to" min="${t}" value="${day}" required></div>
-      </div>
-      <div class="row"><label class="f">Ile pokoi</label><input type="number" name="count" min="1" max="${rooms.filter(r => r.building === 'hotel').length}" required></div>
-      <div class="row"><label class="f">Opis</label><input type="text" name="note" value="${esc($('#blkNote').value)}" placeholder="np. wesele Kowalskich"></div>
+      <div class="row"><label class="f">Od dnia<input type="date" name="from" min="${t}" value="${day}" required></label></div>
+      <div class="row"><label class="f">Do dnia (włącznie)<input type="date" name="to" min="${t}" value="${day}" required></label></div>
+      <div class="row"><label class="f">Ile pokoi<input type="number" name="count" inputmode="numeric" min="1" max="${rooms.filter(r => r.building === 'hotel').length}" required></label></div>
+      <div class="row"><label class="f">Opis<input type="text" name="note" value="${esc($('#blkNote').value)}" placeholder="np. wesele Kowalskich"></label></div>
       <button class="btn pri">Zablokuj</button>
     </form>`;
   dlg.showModal();
@@ -486,9 +577,10 @@ $('#dlgBody').addEventListener('submit', async e => {
   e.preventDefault();
   const f = Object.fromEntries(new FormData(e.target));
   const { data, error } = await sb.rpc('pokoje_block_hotel', { p_from: f.from, p_to: f.to, p_count: +f.count, p_note: f.note });
-  if (error) return alert(error.message);
+  // P0001 = our own check in pokoje_block_hotel, already in plain Polish.
+  if (error) return error.code === 'P0001' ? ask({ title: 'Nie zablokowano pokoi', body: error.message }) : fail('Nie zablokowano pokoi', error);
   dlg.close();
-  calMsg(`Zablokowano ${data.length} pokoi (${f.from === f.to ? shortDay(f.from) : shortDay(f.from) + ' do ' + shortDay(f.to)}): ${data.join(', ')}.`);
+  calMsg(`Zablokowano ${plural(data.length, 'pokój', 'pokoje', 'pokoi')} (${f.from === f.to ? shortDay(f.from) : shortDay(f.from) + ' do ' + shortDay(f.to)}): ${data.join(', ')}.`);
   loadBlocks();
 });
 
@@ -500,7 +592,7 @@ function renderEv() {
   const counts = {};
   events.forEach(e => { counts[e.day] = (counts[e.day] || 0) + 1; });
   $('#evMonth').textContent = monthTitle();
-  $('#evGrid').innerHTML = gridHtml(counts, 'ev');
+  $('#evGrid').innerHTML = gridHtml(counts, 'ev', ['impreza', 'imprezy', 'imprez']);
   $('#evDayName').textContent = plDay(day);
   $('#evTools').hidden = !canEdit();
   const list = eventsOn(day);
@@ -512,8 +604,8 @@ function renderEv() {
     : '<p class="empty">Brak imprez tego dnia.</p>';
 }
 
-const evFields = (kind, data) => EVENT_COLS[kind].map(c => `<div class="row"><label class="f">${esc(c)}</label>${c === 'inne'
-  ? `<textarea data-col="${esc(c)}">${esc(data[c])}</textarea>` : `<input type="text" data-col="${esc(c)}" value="${esc(data[c])}">`}</div>`).join('');
+const evFields = (kind, data) => EVENT_COLS[kind].map(c => `<div class="row"><label class="f">${esc(c)}${c === 'inne'
+  ? `<textarea data-col="${esc(c)}">${esc(data[c])}</textarea>` : `<input type="text" data-col="${esc(c)}" value="${esc(data[c])}">`}</label></div>`).join('');
 const evValues = () => Object.fromEntries([...document.querySelectorAll('#evForm [data-col]')].map(x => [x.dataset.col, x.value.trim()]).filter(([, v]) => v));
 
 function evSheet(e) {
@@ -522,8 +614,8 @@ function evSheet(e) {
   $('#dlgBody').innerHTML = `<h3>${e ? 'Edytuj imprezę' : 'Nowa impreza'}<button class="x" aria-label="Zamknij">×</button></h3>
     <form id="evForm" data-id="${e?.id || ''}">
       <div class="row" style="display:flex;gap:8px">
-        <div style="flex:1"><label class="f">Data</label><input type="date" name="day" value="${e?.day || day}" required></div>
-        <div style="flex:1"><label class="f">Rodzaj</label><select name="kind">${Object.entries(KIND).map(([k, l]) => `<option value="${k}" ${k === kind ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+        <div style="flex:1;min-width:0"><label class="f">Data<input type="date" name="day" value="${e?.day || day}" required></label></div>
+        <div style="flex:1;min-width:0"><label class="f">Rodzaj<select name="kind">${Object.entries(KIND).map(([k, l]) => `<option value="${k}" ${k === kind ? 'selected' : ''}>${l}</option>`).join('')}</select></label></div>
       </div>
       <div id="evFields">${evFields(kind, e?.data || {})}</div>
       <div style="display:flex;gap:8px"><button class="btn pri">Zapisz</button>${e ? '<button type="button" class="btn" id="evDel">Usuń</button>' : ''}</div>
@@ -541,10 +633,10 @@ $('#dlgBody').addEventListener('submit', async e => {
   if (e.target.id !== 'evForm') return;
   e.preventDefault();
   const f = e.target, data = evValues(), id = +f.dataset.id;
-  if (!Object.keys(data).length) return alert('Wypełnij przynajmniej jedno pole.');
+  if (!Object.keys(data).length) return ask({ title: 'Impreza jest pusta', body: 'Wypełnij przynajmniej jedno pole, na przykład rodzaj uroczystości albo nazwisko.' });
   const row = { day: f.day.value, kind: f.kind.value, data };
   const { error } = id ? await sb.from('pokoje_events').update(row).eq('id', id) : await sb.from('pokoje_events').insert({ ...row, sort: 100000 });
-  if (error) return alert('Nie zapisano: ' + error.message);
+  if (error) return fail('Nie zapisano imprezy', error);
   dlg.close();
   day = row.day; month = day.slice(0, 7);
   loadBlocks();
@@ -553,10 +645,12 @@ $('#dlgBody').addEventListener('click', async e => {
   if (e.target.id !== 'evDel') return;
   const id = +$('#evForm').dataset.id;
   const own = files.filter(f => f.event_id === id);
-  if (!confirm('Usunąć tę imprezę' + (own.length ? ` i ${own.length} załączonych plików` : '') + '? Tego nie da się cofnąć.')) return;
+  const ev = events.find(x => x.id === id);
+  if (!await ask({ title: `Usunąć imprezę „${evTitle(ev)}”?`, danger: true, ok: 'Usuń imprezę', cancel: 'Anuluj',
+    body: (own.length ? `Razem z nią znikną załączniki: ${plural(own.length, 'plik', 'pliki', 'plików')}. ` : '') + 'Tego nie da się cofnąć.' })) return;
   // Row first (its file rows go with it); if the storage step fails only an unseen object is left.
   const { error } = await sb.from('pokoje_events').delete().eq('id', id);
-  if (error) return alert('Nie usunięto: ' + error.message);
+  if (error) return fail('Nie usunięto imprezy', error);
   if (own.length) await sb.storage.from('pokoje-files').remove(own.map(f => f.path));
   dlg.close();
   loadBlocks();
@@ -569,14 +663,14 @@ $('#evList').addEventListener('click', async e => {
     e.preventDefault();
     const f = files.find(x => x.id === +open.dataset.file);
     const { data, error } = await sb.storage.from('pokoje-files').createSignedUrl(f.path, 60, { download: f.name });
-    if (error) return alert('Nie pobrano pliku: ' + error.message);
+    if (error) return fail('Nie udało się pobrać pliku', error);
     location.href = data.signedUrl;
   }
   if (del) {
     const f = files.find(x => x.id === +del.dataset.delfile);
-    if (!confirm(`Usunąć plik ${f.name}?`)) return;
+    if (!await ask({ title: `Usunąć plik „${f.name}”?`, body: 'Tego nie da się cofnąć.', danger: true, ok: 'Usuń plik', cancel: 'Anuluj' })) return;
     const { error } = await sb.from('pokoje_files').delete().eq('id', f.id);
-    if (error) return alert('Nie usunięto pliku: ' + error.message);
+    if (error) return fail('Nie usunięto pliku', error);
     await sb.storage.from('pokoje-files').remove([f.path]);
     loadBlocks();
   }
@@ -596,7 +690,7 @@ $('#evList').addEventListener('change', async e => {
     const row = await sb.from('pokoje_files').insert({ event_id: eventId, name: file.name, path, size: file.size });
     if (row.error) { await sb.storage.from('pokoje-files').remove([path]); problems.push(`${file.name}: ${row.error.message}`); }
   }
-  if (problems.length) alert('Nie dodano:\n' + problems.join('\n'));
+  if (problems.length) ask({ title: problems.length === input.files.length ? 'Nie dodano plików' : 'Nie dodano części plików', body: problems.join('\n') });
   loadBlocks();
 });
 
@@ -613,7 +707,7 @@ async function roomSheet(id) {
       ? '<button class="big free" data-act="free">Zwolnij pokój</button>'
       : '<button class="big take" data-act="take">Zajmij pokój</button>'}</div>` : ''}
     ${guestFields(dis, ['data-f="guest"', r.guest], ['data-beds', r.extra_beds], ['data-f="note"', r.note])}
-    ${canEdit() ? `<div class="row"><label class="f">Nazwa pokoju</label><input type="text" data-f="name" value="${esc(r.name)}"></div>` : ''}
+    ${canEdit() ? `<div class="row"><label class="f">Nazwa pokoju<input type="text" data-f="name" value="${esc(r.name)}"></label></div>` : ''}
     ${isAdmin() ? '<div class="row"><label class="f">Historia pokoju</label><ul class="log" id="roomLog"><li class="meta">Wczytuję…</li></ul></div>' : ''}`;
   if (!isAdmin()) return;
   const { data } = await sb.from('pokoje_log').select('*').eq('room_id', id).order('at', { ascending: false }).limit(15);
@@ -625,8 +719,10 @@ $('#dlgBody').addEventListener('click', e => {
   const r = rooms.find(x => x.id === openId); if (!r) return;
   const act = e.target.dataset.act, beds = e.target.dataset.beds;
   const k = blockOf(r.id, todayISO());
-  if (act === 'take' && (!k || confirm(`${r.name} jest zablokowany na dziś${k.note ? ' (' + k.note + ')' : ''}. Zająć mimo to?`)))
-    save(r.id, { occupied: true }, true);
+  if (act === 'take') (async () => {
+    if (!k || await ask({ title: `Zająć ${r.name}?`, body: `Pokój jest zablokowany na dziś${k.note ? ' (' + k.note + ')' : ''}.`, ok: 'Zajmij mimo to', cancel: 'Anuluj' }))
+      save(r.id, { occupied: true }, true);
+  })();
   if (act === 'free') save(r.id, { occupied: false, guest: '', extra_beds: 0 });
   if (beds) {
     const v = r.extra_beds + +beds;
@@ -677,21 +773,21 @@ function teamSheet() {
   $('#dlgBody').innerHTML = `
     <h3>Zespół<button class="x" aria-label="Zamknij">×</button></h3>
     <p class="meta">Admin: wszystko, także historia zmian. Edycja: zmienia pokoje, imprezy i zespół. Podgląd: tylko widzi.</p>
-    <div class="staff">${staff.map(s => `<span>${esc(s.name || shortEmail(s.email))}<br><small class="meta">${esc(shortEmail(s.email))}${isLocal(s.email) ? '' : ' · przez Google'}</small></span>
-      ${ed && !s.locked && s.email !== me && (s.role !== 'admin' || isAdmin()) ? `<select data-role="${esc(s.email)}">${roleOptions(s.role)}</select>
-      ${isLocal(s.email) ? `<button class="btn" data-pw="${esc(s.email)}">Hasło</button>` : '<span></span>'}
-      <button class="btn" data-del="${esc(s.email)}">Usuń</button>`
-      : `<span class="meta">${ROLE_TXT[s.role]}${s.locked ? ' 🔒' : s.email === me ? ' (Ty)' : ''}</span><span></span><span></span>`}`).join('')}</div>
+    <ul class="staff">${staff.map(s => `<li><b>${esc(s.name || shortEmail(s.email))}</b><br><span class="meta">${esc(shortEmail(s.email))}${isLocal(s.email) ? '' : ' · przez Google'}</span>
+      ${ed && !s.locked && s.email !== me && (s.role !== 'admin' || isAdmin()) ? `<div class="acts"><select data-role="${esc(s.email)}" aria-label="Uprawnienia: ${esc(s.name || shortEmail(s.email))}">${roleOptions(s.role)}</select>
+      ${isLocal(s.email) ? `<button class="btn" data-pw="${esc(s.email)}">Zmień hasło</button>` : ''}
+      <button class="btn" data-del="${esc(s.email)}">Usuń</button></div>`
+      : `<div class="meta">Uprawnienia: ${ROLE_TXT[s.role]}${s.locked ? ' 🔒 właściciel' : s.email === me ? ' (Ty)' : ''}</div>`}</li>`).join('')}</ul>
     ${ed ? `<form id="teamForm" class="row">
-      <label class="f">Dodaj osobę</label>
-      <input type="text" name="name" placeholder="imię i nazwisko">
-      <input type="text" name="login" placeholder="login, np. ania.k (albo adres Gmail)" autocapitalize="none" required style="margin-top:8px">
-      <input type="text" name="password" placeholder="hasło startowe, min. 8 znaków" autocomplete="off" style="margin-top:8px">
+      <h4 style="margin:0 0 8px">Dodaj osobę</h4>
+      <label class="f">Imię i nazwisko<input type="text" name="name" autocomplete="off"></label>
+      <label class="f" style="margin-top:8px">Login albo adres Gmail<input type="text" name="login" placeholder="np. ania.k" autocapitalize="none" autocomplete="off" required></label>
+      <label class="f" style="margin-top:8px">Hasło startowe, min. 8 znaków<input type="text" name="password" autocomplete="off"></label>
       <p class="meta">Podaj login i hasło. Osoba z kontem Google może zamiast loginu podać adres Gmail, wtedy hasło nie jest potrzebne.</p>
-      <div style="display:flex;gap:8px"><select name="role" style="width:auto">${roleOptions('view')}</select>
+      <div style="display:flex;gap:8px"><select name="role" style="width:auto" aria-label="Uprawnienia">${roleOptions('view')}</select>
       <button class="btn pri">Dodaj</button></div></form>
-    <div class="row"><label class="f">Ile mamy łóżek dostawkowych w sumie?</label>
-      <input type="number" min="0" id="bedsTotal" value="${settings.extra_beds_total ?? ''}" placeholder="nie wiadomo"></div>` : ''}`;
+    <div class="row"><label class="f">Ile mamy łóżek dostawkowych w sumie?
+      <input type="number" inputmode="numeric" min="0" id="bedsTotal" value="${settings.extra_beds_total ?? ''}" placeholder="nie wiadomo"></label></div>` : ''}`;
 }
 
 // Login accounts need the service role, so they go through the edge function.
@@ -699,7 +795,7 @@ async function staffFn(body) {
   const { error } = await sb.functions.invoke('pokoje-staff', { body });
   if (!error) return true;
   const msg = await error.context?.json?.().then(j => j.error).catch(() => null);
-  alert(msg || 'Nie udało się: ' + error.message);
+  if (msg) ask({ title: 'Nie udało się', body: msg }); else fail('Nie udało się', error);
   return false;
 }
 
@@ -708,19 +804,19 @@ $('#dlgBody').addEventListener('submit', async e => {
   e.preventDefault();
   const f = Object.fromEntries(new FormData(e.target));
   const login = f.login.trim().toLowerCase(), name = f.name.trim();
-  if (login.includes('@') && f.password) return alert('Osoba z adresem Gmail loguje się przyciskiem „Zaloguj przez Google”, bez hasła. Jeśli ma się logować hasłem, wpisz sam login, bez @, np. magda.k');
+  if (login.includes('@') && f.password) return ask({ title: 'Konto Google nie potrzebuje hasła', body: 'Osoba z adresem Gmail loguje się przyciskiem „Zaloguj przez Google”. Jeśli ma się logować hasłem, wpisz sam login, bez @, na przykład magda.k.' });
   if (login.includes('@')) {
     const { error } = await sb.from('pokoje_staff').insert({ email: login, name, role: f.role });
-    if (error) return alert(error.code === '23505' ? 'Ta osoba już jest na liście.' : 'Nie dodano: ' + error.message);
+    if (error) return error.code === '23505' ? ask({ title: 'Ta osoba już jest w zespole' }) : fail('Nie dodano osoby', error);
   } else if (!await staffFn({ action: 'create', login, password: f.password, name, role: f.role })) return;
-  else alert(`Konto gotowe. Login: ${login}\nPrzekaż hasło osobiście.`);
+  else ask({ title: 'Konto gotowe', body: `Login: ${login}\nPrzekaż hasło osobiście.` });
   await load(); teamSheet();
 });
 $('#dlgBody').addEventListener('change', async e => {
   const t = e.target;
   if (t.dataset.role) {
     const { data } = await sb.from('pokoje_staff').update({ role: t.value }).eq('email', t.dataset.role).select();
-    if (!data?.length) alert('Nie zmieniono uprawnień.');
+    if (!data?.length) ask({ title: 'Nie zmieniono uprawnień', body: 'Tej osoby nie możesz zmieniać (na przykład admina). Odśwież listę i spróbuj ponownie.' });
   }
   if (t.id === 'bedsTotal') await sb.from('pokoje_settings').update({ extra_beds_total: t.value === '' ? null : +t.value }).eq('id', 1);
   if (t.dataset.role || t.id === 'bedsTotal') { await load(); teamSheet(); }
@@ -728,15 +824,19 @@ $('#dlgBody').addEventListener('change', async e => {
 $('#dlgBody').addEventListener('click', async e => {
   const { del, pw } = e.target.dataset;
   if (pw) {
-    const password = prompt(`Nowe hasło dla ${shortEmail(pw)} (min. 8 znaków):`);
-    if (password && await staffFn({ action: 'password', login: pw, password })) alert('Hasło zmienione.');
+    const password = await ask({ title: `Nowe hasło: ${who(pw)}`, ok: 'Zmień hasło', cancel: 'Anuluj',
+      field: { label: 'Nowe hasło, min. 8 znaków', type: 'password', autocomplete: 'new-password', min: 8 } });
+    if (password && await staffFn({ action: 'password', login: pw, password }))
+      ask({ title: 'Hasło zmienione', body: 'Ta osoba została wylogowana ze wszystkich urządzeń i loguje się nowym hasłem.' });
   }
-  if (del && confirm(`Usunąć ${who(del)}? Straci dostęp od razu.`)) {
+  if (del && await ask({ title: `Usunąć ${who(del)} z zespołu?`, body: 'Straci dostęp od razu.', danger: true, ok: 'Usuń z zespołu', cancel: 'Anuluj' })) {
     if (isLocal(del)) await staffFn({ action: 'delete', login: del });
     else await sb.from('pokoje_staff').delete().eq('email', del);
     await load(); teamSheet();
   }
 });
+
+$('#retry').onclick = () => { netError(null); load(); };
 
 start();
 </script>
