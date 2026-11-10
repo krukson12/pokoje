@@ -125,12 +125,12 @@ do $$ begin
 exception when duplicate_object then null;
 end $$;
 
--- Seed: manor rooms 27-30 (30 for newlyweds), hotel rooms 1-27 (ids h1-h28 skip h11; h12 is named Hotel 11). Rename in the app.
+-- Seed: manor rooms 28-31 (28 for newlyweds), hotel rooms 1-27 (ids h1-h28 skip h11; h12 is named Hotel 11). Rename in the app.
 insert into pokoje_rooms (id, building, sort, name) values
-  ('d1', 'dworek', 1, 'Dworek 27'),
-  ('d2', 'dworek', 2, 'Dworek 28'),
-  ('d3', 'dworek', 3, 'Dworek 29'),
-  ('d4', 'dworek', 4, 'Dworek 30 (małżeński)')
+  ('d1', 'dworek', 1, 'Dworek 28 (małżeński)'),
+  ('d2', 'dworek', 2, 'Dworek 29'),
+  ('d3', 'dworek', 3, 'Dworek 30'),
+  ('d4', 'dworek', 4, 'Dworek 31')
 on conflict do nothing;
 insert into pokoje_rooms (id, building, sort, name)
   select 'h' || n, 'hotel', n, 'Hotel ' || (case when n > 11 then n - 1 else n end) from generate_series(1, 28) n where n <> 11
